@@ -1,0 +1,40 @@
+name: Build respondR App
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-26
+
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.0-beta'
+
+      - name: Resolve Swift Packages
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project respondR.xcodeproj
+
+      - name: Build App
+        run: |
+          xcodebuild \
+            -project respondR.xcodeproj \
+            -target respondR \
+            -destination "generic/platform=visionOS" \
+            -configuration Release \
+            build
