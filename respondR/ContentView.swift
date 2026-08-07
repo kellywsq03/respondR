@@ -6,45 +6,20 @@
 //
 
 import SwiftUI
-import RealityKit
 
 struct ContentView: View {
-
-    @State var enlarge = false
+    @State private var screen: AppScreen = .phaseSelection
+    @State private var viewModel = SceneViewModel()
 
     var body: some View {
-        VStack {
-            RealityView { content in
-                // Add the initial RealityKit content
-                if let scene = try? await Entity(named: "Scene", in: .main) {
-                    content.add(scene)
-                }
-            } update: { content in
-                // Update the RealityKit content when SwiftUI state changes
-                if let scene = content.entities.first {
-                    let uniformScale: Float = enlarge ? 1.4 : 1.0
-                    scene.transform.scale = [uniformScale, uniformScale, uniformScale]
-                }
-            }
-            .gesture(TapGesture().targetedToAnyEntity().onEnded { _ in
-                enlarge.toggle()
-            })
-
-            VStack {
-                Button {
-                    enlarge.toggle()
-                } label: {
-                    Text(enlarge ? "Reduce RealityView Content" : "Enlarge RealityView Content")
-                }
-                .animation(.none, value: 0)
-                .fontWeight(.semibold)
-            }
-            .padding()
-            .glassBackgroundEffect()
+        switch screen {
+        case .phaseSelection:
+            PhaseSelectionView(screen: $screen)
+        case .layoutSelection:
+            LayoutSelectionView(screen: $screen)
+        case .liveScene(let layoutID):
+            SceneView(layoutID: layoutID, screen: $screen)
+                .environment(viewModel)
         }
     }
-}
-
-#Preview(windowStyle: .volumetric) {
-    ContentView()
 }
