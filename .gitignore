@@ -11,3 +11,4 @@ DerivedData/
 build/
 *.o
 *.d
+*/Secrets.xcconfig
