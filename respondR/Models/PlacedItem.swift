@@ -16,7 +16,7 @@ struct ItemType: Equatable {
         ItemType(name: "Couch",        sfSymbol: "rectangle.split.3x1.fill", category: .furniture),
         ItemType(name: "Table",        sfSymbol: "tablecells",               category: .furniture),
         ItemType(name: "Chair",        sfSymbol: "chair",                    category: .furniture),
-        ItemType(name: "Bed",          sfSymbol: "bed.double.fill",          category: .furniture),
+        ItemType(name: "Bed",          sfSymbol: "cone.fill",                category: .furniture),
         ItemType(name: "Stove",        sfSymbol: "flame.fill",               category: .appliances),
         ItemType(name: "Refrigerator", sfSymbol: "refrigerator.fill",        category: .appliances),
         ItemType(name: "Washer",       sfSymbol: "washer.fill",              category: .appliances),

@@ -191,15 +191,36 @@ func colorForCategory(_ category: ItemCategory) -> UIColor {
 }
 
 func buildPlacedItemEntity(_ item: PlacedItem) -> ModelEntity {
-    let mesh = MeshResource.generateBox(size: 0.028, cornerRadius: 0.004)
+    let isCone = (item.itemType.name == "Bed")
+    let mesh: MeshResource
+    let collisionShape: ShapeResource
+    let yLift: Float
+    let matColor: UIColor
+
+    if isCone {
+        let coneHeight: Float = 0.08          // 8 cm — clearly visible
+        let coneRadius: Float = 0.03          // 3 cm base
+        mesh = MeshResource.generateCone(height: coneHeight, radius: coneRadius)
+        // Generous box collider — easier to click in the sim
+        collisionShape = .generateBox(size: SIMD3<Float>(coneRadius * 2.5, coneHeight * 1.2, coneRadius * 2.5))
+        yLift = coneHeight / 2
+        matColor = UIColor.systemOrange       // saturated color for visibility
+    } else {
+        mesh = MeshResource.generateBox(size: 0.028, cornerRadius: 0.004)
+        collisionShape = .generateBox(size: SIMD3<Float>(repeating: 0.028))
+        yLift = 0.017
+        matColor = colorForCategory(item.itemType.category)
+    }
+
     var mat = SimpleMaterial()
-    mat.color = .init(tint: colorForCategory(item.itemType.category))
+    mat.color = .init(tint: matColor)
     mat.roughness = .float(0.6)
     let entity = ModelEntity(mesh: mesh, materials: [mat])
     entity.name = "placed_\(item.id.uuidString)"
-    entity.position = SIMD3(item.position.x, 0.017, item.position.z)
-    entity.collision = CollisionComponent(shapes: [.generateBox(size: SIMD3<Float>(repeating: 0.028))])
+    entity.position = SIMD3(item.position.x, yLift, item.position.z)
+    entity.collision = CollisionComponent(shapes: [collisionShape])
     entity.components.set(InputTargetComponent())
+    entity.components.set(HoverEffectComponent())
     entity.components.set(PlacedItemComponent(itemID: item.id))
     return entity
 }
@@ -213,6 +234,8 @@ struct SceneView: View {
 
     @State private var scaleDelta: Float = 1.0
     @State private var rotationDelta: Float = 0.0
+    @State private var draggingItemID: UUID? = nil
+    @State private var itemDragDelta: SIMD3<Float> = .zero
 
     // Initial tilt: ~20° toward the user so the floor plan is visible straight-on.
     // Rotating around Y then composes on top of this, revealing the 3D structure.
@@ -228,14 +251,11 @@ struct SceneView: View {
             content.add(tabletop)
             viewModel.tabletopAnchor = tabletop
 
-            // Compute walkability grid from the loaded room, then add visual overlay.
-            // Must run AFTER content.add(tabletop) so tabletop.scene is available for raycasts.
+            // Compute walkability grid from the loaded room (invisible — used only for snap
+            // logic in handleTap and item drag). Must run AFTER content.add(tabletop).
             if let room = tabletop.findEntity(named: "roomModel") {
                 let boundsLocal = room.visualBounds(relativeTo: tabletop)
-                let grid = computeFloorGrid(tabletop: tabletop, roomBoundsLocal: boundsLocal)
-                viewModel.floorGrid = grid
-                let overlay = buildGridOverlay(grid)
-                tabletop.addChild(overlay)
+                viewModel.floorGrid = computeFloorGrid(tabletop: tabletop, roomBoundsLocal: boundsLocal)
             }
 
             // Billboarded palette: fixed position to the right of the tabletop,
@@ -252,6 +272,15 @@ struct SceneView: View {
             tabletop.scale    = SIMD3(repeating: viewModel.tabletopScale * scaleDelta)
             let yRot = simd_quatf(angle: viewModel.tabletopRotationY + rotationDelta, axis: [0, 1, 0])
             tabletop.orientation = yRot * baseTilt
+
+            // Live drag preview for placed items
+            if let itemID = draggingItemID,
+               let idx = viewModel.placedItems.firstIndex(where: { $0.id == itemID }),
+               let entity = tabletop.findEntity(named: "placed_\(itemID.uuidString)") {
+                let base = viewModel.placedItems[idx].position
+                let yLift = entity.position.y  // preserve whatever lift the item was built with
+                entity.position = SIMD3(base.x + itemDragDelta.x, yLift, base.z + itemDragDelta.z)
+            }
         } attachments: {
             Attachment(id: "palette") {
                 ItemPaletteView()
@@ -261,6 +290,27 @@ struct SceneView: View {
         .simultaneousGesture(magnifyGesture)
         .simultaneousGesture(rotateGesture)
         .simultaneousGesture(tapGesture)
+        .simultaneousGesture(itemDragGesture)
+        .onChange(of: viewModel.selectedItemType) { _, newValue in
+            // Click-drag-drop UX: tapping a palette item auto-spawns it at the room
+            // center already selected, so the user can immediately pinch and drag.
+            guard let itemType = newValue else { return }
+            print("🎯 Palette selection changed → \(itemType.name)")
+            guard itemType.name == "Bed" else {
+                print("   (not a cone — falling back to tap-to-place)")
+                return
+            }
+            guard let tabletop = viewModel.tabletopAnchor else {
+                print("❌ No tabletopAnchor — room hasn't loaded yet")
+                return
+            }
+            let spawnLocal = snapToGrid(SIMD3<Float>(0, 0, 0))
+            let placed = viewModel.placeItem(itemType, at: spawnLocal)
+            let entity = buildPlacedItemEntity(placed)
+            tabletop.addChild(entity)
+            viewModel.selectedPlacedItemID = placed.id
+            print("🔶 Spawned cone at tabletop-local \(entity.position), name=\(entity.name)")
+        }
         .ornament(attachmentAnchor: .scene(.top), contentAlignment: .bottom) {
             HStack(spacing: 14) {
                 Button {
@@ -318,6 +368,62 @@ struct SceneView: View {
             }
     }
 
+    /// Drag a placed item (e.g., a cone) to a new floor cell. Snaps to grid on release
+    /// and rejects the move if the destination cell is blocked (reverts to origin).
+    private var itemDragGesture: some Gesture {
+        DragGesture()
+            .targetedToAnyEntity()
+            .onChanged { value in
+                guard let component = value.entity.components[PlacedItemComponent.self],
+                      let tabletop = viewModel.tabletopAnchor else {
+                    if draggingItemID == nil {
+                        // Log which entity was hit for debugging why drag didn't engage
+                        print("↔️ Drag hit entity '\(value.entity.name)' — no PlacedItemComponent, ignoring")
+                    }
+                    return
+                }
+                if draggingItemID == nil {
+                    draggingItemID = component.itemID
+                    viewModel.selectedItemType = nil
+                    viewModel.selectedPlacedItemID = component.itemID
+                    print("✋ Started dragging placed item \(component.itemID.uuidString.prefix(6))")
+                }
+                let t = value.translation3D
+                let worldDelta = SIMD3<Float>(Float(t.x), Float(t.y), Float(t.z))
+                let origin = tabletop.convert(position: .zero, from: nil)
+                let tip = tabletop.convert(position: worldDelta, from: nil)
+                itemDragDelta = SIMD3(tip.x - origin.x, 0, tip.z - origin.z)
+            }
+            .onEnded { value in
+                defer {
+                    draggingItemID = nil
+                    itemDragDelta = .zero
+                }
+                guard let itemID = draggingItemID,
+                      let idx = viewModel.placedItems.firstIndex(where: { $0.id == itemID }),
+                      let tabletop = viewModel.tabletopAnchor,
+                      let entity = tabletop.findEntity(named: "placed_\(itemID.uuidString)") else { return }
+
+                let t = value.translation3D
+                let worldDelta = SIMD3<Float>(Float(t.x), Float(t.y), Float(t.z))
+                let origin = tabletop.convert(position: .zero, from: nil)
+                let tip = tabletop.convert(position: worldDelta, from: nil)
+                let localDelta = SIMD3<Float>(tip.x - origin.x, 0, tip.z - origin.z)
+
+                let candidate = SIMD3<Float>(
+                    viewModel.placedItems[idx].position.x + localDelta.x,
+                    viewModel.placedItems[idx].position.y,
+                    viewModel.placedItems[idx].position.z + localDelta.z
+                )
+
+                let snapped = snapToGrid(candidate)
+                viewModel.placedItems[idx].position.x = snapped.x
+                viewModel.placedItems[idx].position.z = snapped.z
+                let yLift = entity.position.y
+                entity.position = SIMD3(snapped.x, yLift, snapped.z)
+            }
+    }
+
     // MARK: - Tap Handling
 
     @MainActor
@@ -335,26 +441,32 @@ struct SceneView: View {
             return
         }
 
+        // Tap-to-place is retained for the box items; the cone flow uses auto-spawn +
+        // drag (see .onChange handler on selectedItemType in body). Tap here still
+        // handles floor taps for non-cone items.
         guard let itemType = viewModel.selectedItemType,
+              itemType.name != "Bed",  // cone uses auto-spawn flow
               let tabletop = viewModel.tabletopAnchor,
-              let grid = viewModel.floorGrid,
               tappedEntity.name != "paletteAttachment",
               !isDescendant(of: "paletteAttachment", entity: tappedEntity) else { return }
 
         let worldLocation = value.convert(value.location3D, from: .local, to: .scene)
         let localLocation = tabletop.convert(position: worldLocation, from: nil)
-
-        // Snap to nearest cell + reject if cell is blocked
-        guard let (col, row) = grid.cellAt(local: localLocation),
-              grid.isWalkable(col: col, row: row) else {
-            print("🚫 Tap outside grid or on blocked cell")
-            return
-        }
-        let snappedLocal = grid.cellCenterLocal(col: col, row: row)
+        let snappedLocal = snapToGrid(localLocation)
 
         let placed = viewModel.placeItem(itemType, at: snappedLocal)
         let placedEntity = buildPlacedItemEntity(placed)
         tabletop.addChild(placedEntity)
+    }
+
+    /// Snap a tabletop-local position to the nearest grid cell center. Falls back to
+    /// the raw position if the grid isn't ready or the point is outside grid bounds.
+    private func snapToGrid(_ local: SIMD3<Float>) -> SIMD3<Float> {
+        guard let grid = viewModel.floorGrid,
+              let (col, row) = grid.cellAt(local: local) else {
+            return SIMD3(local.x, 0, local.z)
+        }
+        return grid.cellCenterLocal(col: col, row: row)
     }
 
     // MARK: - Helpers
