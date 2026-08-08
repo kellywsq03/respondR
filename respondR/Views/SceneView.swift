@@ -76,6 +76,61 @@ func loadRoomEntity() async -> Entity {
     return group
 }
 
+@MainActor
+func loadAssetEntity(named assetName: String) async -> Entity {
+    let group = Entity()
+    group.name = "tabletopGroup"
+
+    let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    let itemsURL = documentsURL.appendingPathComponent("items")
+    let assetURL = itemsURL.appendingPathComponent(assetName)
+
+    let room: Entity?
+    do {
+        room = try await Entity(contentsOf: assetURL)
+        print("✅ Loaded asset via contentsOf URL: \(assetURL.path)")
+    } catch {
+        print("❌ Failed loading asset at \(assetURL.path): \(error)")
+        room = nil
+    }
+
+    guard let room else { return group }
+
+    room.name = "roomModel"
+
+    // Fit the model into a ~0.6 m footprint centered at group origin, floor at y=0.
+    let bounds = room.visualBounds(relativeTo: nil)
+    let size = bounds.max - bounds.min
+    let maxHorizontal = max(size.x, size.z)
+    let targetSize: Float = 0.6
+    let scale = maxHorizontal > 0 ? targetSize / maxHorizontal : 1.0
+    room.scale = SIMD3(repeating: scale)
+
+    let center = (bounds.min + bounds.max) * 0.5
+    room.position = SIMD3(
+        -center.x * scale,
+        -bounds.min.y * scale,
+        -center.z * scale
+    )
+    print("📐 Applied scale \(scale), position \(room.position) for asset")
+
+    group.addChild(room)
+    room.generateCollisionShapes(recursive: true)
+    enableInputTargeting(room)
+
+    let scaledSize = size * scale
+    let boxSize = SIMD3<Float>(
+        max(scaledSize.x, 0.1) + 0.05,
+        max(scaledSize.y, 0.1) + 0.05,
+        max(scaledSize.z, 0.1) + 0.05
+    )
+    group.components.set(CollisionComponent(shapes: [ShapeResource.generateBox(size: boxSize)]))
+    group.components.set(InputTargetComponent())
+    group.components.set(HoverEffectComponent())
+
+    return group
+}
+
 private func enableInputTargeting(_ entity: Entity) {
     entity.components.set(InputTargetComponent())
     for child in entity.children {
@@ -344,7 +399,8 @@ func buildPlacedItemEntity(_ item: PlacedItem) -> ModelEntity {
 // MARK: - Scene View
 
 struct SceneView: View {
-    let layoutID: Int
+    let layoutID: Int?
+    let assetName: String?
     @Binding var screen: AppScreen
     @Environment(SceneViewModel.self) var viewModel
 
@@ -357,11 +413,16 @@ struct SceneView: View {
     // Rotating around Y then composes on top of this, revealing the 3D structure.
     private let baseTilt = simd_quatf(angle: -.pi / 9, axis: [1, 0, 0])
 
-    var layout: LayoutConfig { LayoutConfig.all.first { $0.id == layoutID }! }
+    var layout: LayoutConfig? { layoutID.flatMap { id in LayoutConfig.all.first { $0.id == id } } }
 
     var body: some View {
         RealityView { content, attachments in
-            let tabletop = await loadRoomEntity()
+            let tabletop: Entity
+            if let name = assetName {
+                tabletop = await loadAssetEntity(named: name)
+            } else {
+                tabletop = await loadRoomEntity()
+            }
             tabletop.position = viewModel.tabletopTranslation
             tabletop.orientation = baseTilt
             content.add(tabletop)
