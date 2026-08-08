@@ -24,7 +24,6 @@ struct ImmersiveMeshView: View {
             appModel.exportHandler = { scanner.exportRoom() }
 
             if appModel.mode == .fire {
-                let sim = FireSimulation(cellSize: 0.05)
                 if let hud = attachments.entity(for: "fire-hud") {
                     content.add(hud)
                     hudEntity = hud

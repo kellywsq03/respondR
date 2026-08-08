@@ -5,6 +5,7 @@ struct ControlWindowView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    @Environment(\.dismissWindow) private var dismissWindow
     @State private var isReturningToPhaseSelection = false
 
     var body: some View {
@@ -137,6 +138,7 @@ struct ControlWindowView: View {
         appModel.statusMessage = nil
         appModel.errorMessage = nil
         screen = .phaseSelection
+        dismissWindow(id: AppSceneID.phase2Controls)
         isReturningToPhaseSelection = false
     }
 }

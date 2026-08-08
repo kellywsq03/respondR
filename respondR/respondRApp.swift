@@ -23,8 +23,7 @@ struct respondRApp: App {
         }
         .windowStyle(.volumetric)
         .defaultSize(width: 2.2, height: 1.0, depth: 1.5, in: .meters)
-
-        ImmersiveSpace(id: "MeshSpace") {
+        
         WindowGroup(id: AppSceneID.phase2Controls) {
             ControlWindowView()
                 .environment(appModel)
