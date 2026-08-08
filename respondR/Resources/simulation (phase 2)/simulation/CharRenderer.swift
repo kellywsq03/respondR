@@ -8,30 +8,54 @@ import RealityKit
 import UIKit
 import simd
 
-/// Leaves a static charred mark behind at each cell that has burnt out.
-/// Unlike FireRenderer (which recycles a small pool across *currently*
-/// active cells), marks are permanent once placed — so this just grows
-/// an entity per newly-burnt cell and never touches it again.
+/// Leaves a static, mesh-conforming char patch behind for completed burns.
+/// Unlike FireRenderer (which recycles a small pool across active cells),
+/// these marks are created only after a cell reaches `.burntOut`.
 @MainActor
 final class CharRenderer {
     private let root: Entity
     private let cellSize: Float
+    private let surfacePatch: (SIMD3<Float>, Float) -> MeshScanner.SurfacePatch?
     private var marks: [Entity] = []
 
-    init(root: Entity, cellSize: Float) {
+    init(
+        root: Entity,
+        cellSize: Float,
+        surfacePatch: @escaping (SIMD3<Float>, Float) -> MeshScanner.SurfacePatch?
+    ) {
         self.root = root
         self.cellSize = cellSize
+        self.surfacePatch = surfacePatch
     }
 
     /// Call once per tick with FireSimulation.drainNewlyBurnt().
-    func add(_ positions: [SIMD3<Float>]) {
+    func addCompletedBurns(_ positions: [SIMD3<Float>]) {
         guard !positions.isEmpty else { return }
-        for p in positions {
-            let entity = ModelEntity(
-                mesh: .generatePlane(width: cellSize * 0.9, depth: cellSize * 0.9),
-                materials: [UnlitMaterial(color: UIColor(red: 0.05, green: 0.05, blue: 0.05, alpha: 1.0))]
+        for position in positions {
+            guard let patch = surfacePatch(position, cellSize * 0.8) else {
+                continue
+            }
+
+            var descriptor = MeshDescriptor(name: "mesh-conforming-char")
+            descriptor.positions = MeshBuffers.Positions(patch.positions)
+            descriptor.normals = MeshBuffers.Normals(patch.normals)
+            descriptor.primitives = .triangles(patch.indices)
+
+            let faceCount = patch.indices.count / 3
+            descriptor.materials = .perFace(
+                (0..<faceCount).map { face in
+                    if face.isMultiple(of: 7) { return 2 }
+                    if face.isMultiple(of: 3) { return 1 }
+                    return 0
+                }
             )
-            entity.position = p
+
+            guard let mesh = try? MeshResource.generate(from: [descriptor]) else {
+                continue
+            }
+
+            let entity = ModelEntity(mesh: mesh, materials: Self.charMaterials)
+            entity.name = "Completed burn char"
             root.addChild(entity)
             marks.append(entity)
         }
@@ -41,4 +65,22 @@ final class CharRenderer {
         for entity in marks { entity.removeFromParent() }
         marks.removeAll()
     }
+
+    private static let charMaterials: [SimpleMaterial] = [
+        SimpleMaterial(
+            color: UIColor(red: 0.012, green: 0.010, blue: 0.008, alpha: 0.96),
+            roughness: 1.0,
+            isMetallic: false
+        ),
+        SimpleMaterial(
+            color: UIColor(red: 0.035, green: 0.024, blue: 0.018, alpha: 0.93),
+            roughness: 0.98,
+            isMetallic: false
+        ),
+        SimpleMaterial(
+            color: UIColor(red: 0.075, green: 0.068, blue: 0.058, alpha: 0.86),
+            roughness: 1.0,
+            isMetallic: false
+        )
+    ]
 }

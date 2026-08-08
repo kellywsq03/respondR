@@ -34,7 +34,10 @@ struct ImmersiveMeshView: View {
 
                 let sim = FireSimulation(cellSize: 0.15)
                 let renderer = FireRenderer(root: root)
-                let chars = CharRenderer(root: root, cellSize: 0.075)
+                let chars = CharRenderer(root: root, cellSize: 0.15) {
+                    position, radius in
+                    scanner.makeCharPatch(near: position, radius: radius)
+                }
                 self.fireSim = sim
                 self.fireRenderer = renderer
                 self.charRenderer = chars
@@ -52,7 +55,7 @@ struct ImmersiveMeshView: View {
                         sim.tick(now: now)
                         let active = sim.activePositions()
                         renderer.sync(active: active)
-                        chars.add(sim.drainNewlyBurnt())
+                        chars.addCompletedBurns(sim.drainNewlyBurnt())
                         updateHUD(
                             elapsed: elapsed,
                             activeFirePositions: active,
