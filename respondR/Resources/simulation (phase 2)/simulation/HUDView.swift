@@ -13,7 +13,10 @@ struct HUDView: View {
 
             Spacer()
 
-            HStack {
+            HStack(alignment: .bottom) {
+                if let guidance = appModel.extinguisherGuidance {
+                    instructionPanel(guidance)
+                }
                 Spacer()
                 timerPanel
             }
@@ -89,6 +92,18 @@ struct HUDView: View {
         .accessibilityLabel("Time remaining")
         .accessibilityValue(appModel.formattedTimeRemaining)
         .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    private func instructionPanel(_ guidance: String) -> some View {
+        Text(guidance)
+            .font(.callout.weight(.semibold))
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: 320, alignment: .leading)
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+            .glassBackgroundEffect()
+            .accessibilityLabel("Fire extinguisher")
+            .accessibilityValue(guidance)
     }
 
     private var healthColor: Color {

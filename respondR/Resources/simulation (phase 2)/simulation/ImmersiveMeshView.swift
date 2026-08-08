@@ -9,6 +9,7 @@ struct ImmersiveMeshView: View {
     @State private var fireSim: FireSimulation?
     @State private var fireRenderer: FireRenderer?
     @State private var charRenderer: CharRenderer?
+    @State private var fireExtinguisher: FireExtinguisherController?
     @State private var tickTask: Task<Void, Never>?
     @State private var hudEntity: Entity?
 
@@ -41,6 +42,20 @@ struct ImmersiveMeshView: View {
                 self.fireSim = sim
                 self.fireRenderer = renderer
                 self.charRenderer = chars
+
+                let extinguisher = FireExtinguisherController(sceneRoot: root)
+                extinguisher.onStateChange = { phase, isSpraying in
+                    appModel.extinguisherPhase = phase
+                    appModel.isExtinguisherSpraying = isSpraying
+                }
+                extinguisher.onError = { message in
+                    appModel.errorMessage = message
+                }
+                self.fireExtinguisher = extinguisher
+                extinguisher.scheduleSpawn {
+                    scanner.queryHeadTransform()
+                }
+
                 scanner.onGeometryUpdate = { positions in
                     sim.insertGeometry(positions)
                 }
@@ -52,6 +67,11 @@ struct ImmersiveMeshView: View {
                         let elapsed = now - lastTick
                         lastTick = now
 
+                        let headTransform = scanner.queryHeadTransform()
+                        extinguisher.update(deviceTransform: headTransform)
+                        if let sprayCone = extinguisher.activeSprayCone {
+                            sim.extinguish(in: sprayCone)
+                        }
                         sim.tick(now: now)
                         let active = sim.activePositions()
                         renderer.sync(active: active)
@@ -59,7 +79,7 @@ struct ImmersiveMeshView: View {
                         updateHUD(
                             elapsed: elapsed,
                             activeFirePositions: active,
-                            scanner: scanner,
+                            headTransform: headTransform,
                             hudEntity: hudEntity
                         )
                         beat += 1
@@ -94,12 +114,20 @@ struct ImmersiveMeshView: View {
             charRenderer?.clear()
             appModel.resetHUD()
             appModel.startTimer()
+            appModel.errorMessage = nil
+            fireExtinguisher?.resetAndSchedule {
+                scanner?.queryHeadTransform()
+            }
         }
         .gesture(
             SpatialTapGesture()
                 .targetedToAnyEntity()
                 .onEnded { value in
                     guard appModel.mode == .fire, let sim = fireSim else {
+                        return
+                    }
+                    if fireExtinguisher?.contains(value.entity) == true {
+                        fireExtinguisher?.pickUp()
                         return
                     }
                     let world = value.convert(
@@ -116,9 +144,17 @@ struct ImmersiveMeshView: View {
                     )
                 }
         )
+        .simultaneousGesture(
+            SpatialEventGesture()
+                .onChanged { events in
+                    handleSpatialEvents(events)
+                }
+        )
         .onDisappear {
             tickTask?.cancel()
             tickTask = nil
+            fireExtinguisher?.cancel()
+            fireExtinguisher = nil
             scanner?.stop()
             hudEntity = nil
             appModel.pauseTimer()
@@ -131,10 +167,10 @@ struct ImmersiveMeshView: View {
     private func updateHUD(
         elapsed: TimeInterval,
         activeFirePositions: [SIMD3<Float>],
-        scanner: MeshScanner,
+        headTransform: simd_float4x4?,
         hudEntity: Entity?
     ) {
-        guard let headTransform = scanner.queryHeadTransform() else {
+        guard let headTransform else {
             appModel.updateHUD(deltaTime: elapsed, isNearActiveFire: false)
             return
         }
@@ -152,5 +188,35 @@ struct ImmersiveMeshView: View {
         var offset = matrix_identity_float4x4
         offset.columns.3 = SIMD4<Float>(0, 0, -0.85, 1)
         hudEntity?.transform = Transform(matrix: headTransform * offset)
+    }
+
+    private func handleSpatialEvents(_ events: SpatialEventCollection) {
+        guard let fireExtinguisher else { return }
+
+        var hasActiveExtinguisherPinch = false
+        var hasFinishedEvent = false
+
+        for event in events {
+            switch event.phase {
+            case .active:
+                switch event.kind {
+                case .directPinch, .indirectPinch:
+                    if let target = event.targetedEntity,
+                       fireExtinguisher.contains(target) {
+                        hasActiveExtinguisherPinch = true
+                    }
+                default:
+                    break
+                }
+            case .ended, .cancelled:
+                hasFinishedEvent = true
+            }
+        }
+
+        if hasActiveExtinguisherPinch {
+            fireExtinguisher.beginSpray()
+        } else if hasFinishedEvent {
+            fireExtinguisher.endSpray()
+        }
     }
 }

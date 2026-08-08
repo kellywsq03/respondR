@@ -26,6 +26,8 @@ final class AppModel {
     var mode: Mode = .wireframe
     /// Bumped to ask the immersive view to reset the fire.
     var resetFireTrigger: Int = 0
+    var extinguisherPhase: FireExtinguisherSession.Phase = .waitingToSpawn
+    var isExtinguisherSpraying: Bool = false
 
     private(set) var health: Double = 1.0
     private(set) var timeRemaining: TimeInterval = hudDuration
@@ -40,6 +42,17 @@ final class AppModel {
     var formattedTimeRemaining: String {
         let totalSeconds = max(0, Int(ceil(timeRemaining)))
         return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+    }
+
+    var extinguisherGuidance: String? {
+        switch extinguisherPhase {
+        case .waitingToSpawn:
+            nil
+        case .available:
+            "Tap the extinguisher to pick it up."
+        case .equipped:
+            "Pinch and hold the extinguisher to spray. Aim the white cone at the fire."
+        }
     }
 
     /// Whether scene reconstruction is available. False in the Simulator and on
