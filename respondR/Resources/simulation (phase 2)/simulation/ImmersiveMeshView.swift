@@ -210,6 +210,8 @@ struct ImmersiveMeshView: View {
                 }
             case .ended, .cancelled:
                 hasFinishedEvent = true
+            @unknown default:
+                hasFinishedEvent = true
             }
         }
 
