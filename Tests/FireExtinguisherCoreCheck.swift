@@ -42,6 +42,39 @@ enum FireExtinguisherCoreCheck {
         }
     }
 
-    static func runSimulationChecks() {}
+    static func runSimulationChecks() {
+        let onAxis = SIMD3<Float>(0.15, 0.15, -0.45)
+        let outside = SIMD3<Float>(0.75, 0.15, -0.45)
+        let cone = SprayCone(
+            apex: .zero,
+            direction: SIMD3<Float>(0, 0, -1),
+            maxDistance: 2,
+            halfAngleRadians: 17.5 * .pi / 180
+        )
+
+        let manual = FireSimulation(cellSize: 0.30, spreadInterval: 100)
+        manual.insertGeometry([onAxis, outside])
+        require(manual.ignite(at: onAxis, now: 0), "first fire must ignite")
+        require(manual.ignite(at: outside, now: 0), "second fire must ignite")
+        require(
+            manual.extinguish(in: cone).count == 1,
+            "cone must remove only the covered fire"
+        )
+        require(manual.activeCount == 1, "uncovered fire must remain active")
+        require(manual.drainNewlyBurnt().isEmpty, "manual removal must not queue char")
+
+        let natural = FireSimulation(
+            cellSize: 0.30,
+            ignitionDuration: 0.1,
+            burnDuration: 0.1,
+            spreadInterval: 100
+        )
+        natural.insertGeometry([onAxis])
+        require(natural.ignite(at: onAxis, now: 0), "natural fire must ignite")
+        natural.tick(now: 0.11)
+        natural.tick(now: 0.22)
+        require(natural.activeCount == 0, "expired fire must leave the active set")
+        require(natural.drainNewlyBurnt().count == 1, "natural burnout must queue char")
+    }
     static func runSessionChecks() {}
 }

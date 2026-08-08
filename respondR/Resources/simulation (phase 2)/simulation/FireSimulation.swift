@@ -27,7 +27,6 @@ final class FireSimulation {
     /// Only igniting/burning cells live here — kept small (≤ maxActive).
     private var runtime: [SIMD3<Int32>: Runtime] = [:]
     /// Cells that have burnt out; never re-ignite.
-    /// Cells that have burnt out; never re-ignite.
     private var burnt: Set<SIMD3<Int32>> = []
     /// World positions of cells that burnt out since the last `drainNewlyBurnt()` call.
     private var pendingBurnt: [SIMD3<Float>] = []
@@ -117,6 +116,20 @@ final class FireSimulation {
     /// World positions of cells currently igniting or burning.
     func activePositions() -> [SIMD3<Float>] {
         runtime.keys.map { grid.center(of: $0) }
+    }
+
+    /// Removes fires covered by extinguisher spray without marking them burnt out.
+    @discardableResult
+    func extinguish(in cone: SprayCone) -> [SIMD3<Float>] {
+        var removed: [SIMD3<Float>] = []
+        for coord in Array(runtime.keys) {
+            let position = grid.center(of: coord)
+            if cone.contains(position, padding: grid.cellSize * 0.5) {
+                runtime[coord] = nil
+                removed.append(position)
+            }
+        }
+        return removed
     }
 
     /// World positions of cells that have burnt out since the last call.
