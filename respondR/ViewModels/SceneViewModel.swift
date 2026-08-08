@@ -10,9 +10,10 @@ class SceneViewModel {
     var selectedPlacedItemID: UUID? = nil
 
     weak var tabletopAnchor: Entity? = nil
+    var floorGrid: FloorGrid? = nil
 
-    // Left of center (panel space), below window center (tabletop feel), z=0 (window mid-depth)
-    var tabletopTranslation: SIMD3<Float> = [-0.2, -0.15, 0.0]
+    // Left of center (leaves room for trailing panel), below center (tabletop feel), forward toward viewer
+    var tabletopTranslation: SIMD3<Float> = [-0.15, -0.15, 0.15]
     var tabletopScale: Float = 1.0
     var tabletopRotationY: Float = 0.0
 

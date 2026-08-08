@@ -4,42 +4,44 @@ struct PhaseSelectionView: View {
     @Binding var screen: AppScreen
 
     var body: some View {
-        VStack(spacing: 40) {
-            VStack(spacing: 8) {
-                Text("RespondR")
-                    .font(.system(size: 48, weight: .bold))
-                Text("Firefighter Training Platform")
-                    .font(.title3)
+        BillboardedPanel {
+            VStack(spacing: 40) {
+                VStack(spacing: 8) {
+                    Text("RespondR")
+                        .font(.system(size: 48, weight: .bold))
+                    Text("Firefighter Training Platform")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("Select Training Phase")
+                    .font(.title2)
                     .foregroundStyle(.secondary)
-            }
 
-            Text("Select Training Phase")
-                .font(.title2)
-                .foregroundStyle(.secondary)
+                HStack(spacing: 32) {
+                    Button {
+                        screen = .layoutSelection
+                    } label: {
+                        PhaseCard(
+                            phase: "Phase I",
+                            subtitle: "Room Familiarization",
+                            icon: "house.fill",
+                            locked: false
+                        )
+                    }
+                    .buttonStyle(.plain)
 
-            HStack(spacing: 32) {
-                Button {
-                    screen = .layoutSelection
-                } label: {
                     PhaseCard(
-                        phase: "Phase I",
-                        subtitle: "Room Familiarization",
-                        icon: "house.fill",
-                        locked: false
+                        phase: "Phase II",
+                        subtitle: "Live Incident Response",
+                        icon: "flame.fill",
+                        locked: true
                     )
                 }
-                .buttonStyle(.plain)
-
-                PhaseCard(
-                    phase: "Phase II",
-                    subtitle: "Live Incident Response",
-                    icon: "flame.fill",
-                    locked: true
-                )
             }
+            .padding(56)
+            .glassBackgroundEffect()
         }
-        .padding(56)
-        .glassBackgroundEffect()
     }
 }
 

@@ -1,157 +1,183 @@
 import SwiftUI
 import RealityKit
 
-// MARK: - Tabletop Factory
+// MARK: - Room Loader
 
-func buildTabletop(layout: LayoutConfig) -> Entity {
+/// Loads new_apple_room.usdz from the app bundle, sets up collision/input so gestures
+/// and tap-to-place work on it, and names the root "tabletopGroup" so the rest of the
+/// scene code can find it via `content.entities.first(where:)`.
+@MainActor
+func loadRoomEntity() async -> Entity {
     let group = Entity()
     group.name = "tabletopGroup"
 
-    // Floor surface — light blueprint tint
-    let floorMesh = MeshResource.generateBox(
-        width: layout.floorSize.x,
-        height: 0.004,
-        depth: layout.floorSize.y,
-        cornerRadius: 0.004
-    )
-    var floorMat = SimpleMaterial()
-    floorMat.color = .init(tint: .init(red: 0.90, green: 0.93, blue: 0.97, alpha: 1.0))
-    floorMat.roughness = .float(0.95)
-    floorMat.metallic = .float(0.0)
-    let floorEntity = ModelEntity(mesh: floorMesh, materials: [floorMat])
-    floorEntity.name = "floorPlane"
-    floorEntity.collision = CollisionComponent(
-        shapes: [.generateBox(width: layout.floorSize.x, height: 0.004, depth: layout.floorSize.y)]
-    )
-    floorEntity.components.set(InputTargetComponent())
-    group.addChild(floorEntity)
-
-    addFloorGrid(to: group, floorSize: layout.floorSize)
-    addPlaceholderFrame(to: group, floorSize: layout.floorSize)
-
-    // Walls — dark charcoal, readable from any angle
-    var wallMat = SimpleMaterial()
-    wallMat.color = .init(tint: .init(red: 0.18, green: 0.22, blue: 0.30, alpha: 1.0))
-    wallMat.roughness = .float(0.9)
-
-    for wall in layout.walls {
-        let wallMesh = MeshResource.generateBox(
-            width: wall.size.x,
-            height: wall.size.y,
-            depth: wall.size.z
-        )
-        let wallEntity = ModelEntity(mesh: wallMesh, materials: [wallMat])
-        wallEntity.position = wall.position
-        wallEntity.orientation = simd_quatf(angle: wall.rotation, axis: [0, 1, 0])
-        group.addChild(wallEntity)
+    let room: Entity?
+    do {
+        room = try await Entity(named: "new_apple_room", in: .main)
+        print("✅ Loaded new_apple_room via Entity(named:in: .main)")
+    } catch {
+        print("⚠️ Entity(named:in: .main) failed: \(error). Trying contentsOf URL…")
+        if let url = Bundle.main.url(forResource: "new_apple_room", withExtension: "usdz") {
+            print("   Bundle URL: \(url.path)")
+            do {
+                room = try await Entity(contentsOf: url)
+                print("✅ Loaded new_apple_room via contentsOf URL")
+            } catch {
+                print("❌ contentsOf URL also failed: \(error)")
+                room = nil
+            }
+        } else {
+            print("❌ Bundle.main.url(forResource: \"new_apple_room\", withExtension: \"usdz\") returned nil")
+            room = nil
+        }
     }
+
+    guard let room else { return group }
+
+    room.name = "roomModel"
+
+    // Fit the model into a ~0.6 m footprint centered at group origin, floor at y=0.
+    let bounds = room.visualBounds(relativeTo: nil)
+    let size = bounds.max - bounds.min
+    let maxHorizontal = max(size.x, size.z)
+    let targetSize: Float = 0.6
+    let scale = maxHorizontal > 0 ? targetSize / maxHorizontal : 1.0
+    room.scale = SIMD3(repeating: scale)
+
+    let center = (bounds.min + bounds.max) * 0.5
+    room.position = SIMD3(
+        -center.x * scale,
+        -bounds.min.y * scale,
+        -center.z * scale
+    )
+    print("📐 Applied scale \(scale), position \(room.position)")
+
+    group.addChild(room)
+    room.generateCollisionShapes(recursive: true)
+    enableInputTargeting(room)
+
+    // Wrap-around collider on the group itself so drag/magnify/rotate gestures
+    // reliably target the tabletop even if the USDZ hierarchy has entities without
+    // meshes. Sized to encompass the whole scaled room + a small margin.
+    let scaledSize = size * scale
+    let boxSize = SIMD3<Float>(
+        max(scaledSize.x, 0.1) + 0.05,
+        max(scaledSize.y, 0.1) + 0.05,
+        max(scaledSize.z, 0.1) + 0.05
+    )
+    group.components.set(CollisionComponent(shapes: [ShapeResource.generateBox(size: boxSize)]))
+    group.components.set(InputTargetComponent())
+    group.components.set(HoverEffectComponent())
 
     return group
 }
 
-/// Bold 3D frame: base border strips + tall corner posts + top connecting rails.
-/// Together these make the placeholder clearly visible from any angle — especially
-/// from the front before the user tilts down to see the floor plan.
-private func addPlaceholderFrame(to parent: Entity, floorSize: SIMD2<Float>) {
-    let frameColor = UIColor(red: 0.20, green: 0.48, blue: 1.00, alpha: 1.0)
-
-    var mat = SimpleMaterial()
-    mat.color = .init(tint: frameColor)
-    mat.roughness = .float(0.5)
-    mat.metallic  = .float(0.2)
-
-    let halfX = floorSize.x / 2
-    let halfZ = floorSize.y / 2
-
-    // ── Base border — thick strips at floor level ──
-    let bH: Float = 0.012
-    let bT: Float = 0.018
-    let bY: Float = bH / 2
-    let baseBorders: [(SIMD3<Float>, SIMD3<Float>)] = [
-        ([0,      bY, -halfZ], [floorSize.x + bT, bH, bT]),
-        ([0,      bY,  halfZ], [floorSize.x + bT, bH, bT]),
-        ([-halfX, bY,  0],     [bT, bH, floorSize.y]),
-        ([ halfX, bY,  0],     [bT, bH, floorSize.y]),
-    ]
-    for (pos, size) in baseBorders {
-        let e = ModelEntity(
-            mesh: MeshResource.generateBox(width: size.x, height: size.y, depth: size.z),
-            materials: [mat]
-        )
-        e.position = pos
-        parent.addChild(e)
-    }
-
-    // ── Corner posts — the tallest elements, visible from eye level ──
-    let postSide: Float = 0.020   // 2 cm square
-    let postH:    Float = 0.200   // 20 cm — clearly above the walls, visible from the front
-    let postMesh = MeshResource.generateBox(width: postSide, height: postH, depth: postSide)
-    let postY = postH / 2
-    let postPositions: [SIMD3<Float>] = [
-        [-halfX, postY, -halfZ],
-        [ halfX, postY, -halfZ],
-        [-halfX, postY,  halfZ],
-        [ halfX, postY,  halfZ],
-    ]
-    for pos in postPositions {
-        let e = ModelEntity(mesh: postMesh, materials: [mat])
-        e.position = pos
-        parent.addChild(e)
-    }
-
-    // ── Top rails — connect post tops, outline the footprint at 20 cm height ──
-    var railMat = SimpleMaterial()
-    railMat.color = .init(tint: frameColor.withAlphaComponent(0.7))
-    railMat.roughness = .float(0.6)
-    let rH: Float = 0.010
-    let rT: Float = 0.010
-    let rY: Float = postH
-    let rails: [(SIMD3<Float>, SIMD3<Float>)] = [
-        ([0,      rY, -halfZ], [floorSize.x, rH, rT]),
-        ([0,      rY,  halfZ], [floorSize.x, rH, rT]),
-        ([-halfX, rY,  0],     [rT, rH, floorSize.y]),
-        ([ halfX, rY,  0],     [rT, rH, floorSize.y]),
-    ]
-    for (pos, size) in rails {
-        let e = ModelEntity(
-            mesh: MeshResource.generateBox(width: size.x, height: size.y, depth: size.z),
-            materials: [railMat]
-        )
-        e.position = pos
-        parent.addChild(e)
+private func enableInputTargeting(_ entity: Entity) {
+    entity.components.set(InputTargetComponent())
+    for child in entity.children {
+        enableInputTargeting(child)
     }
 }
 
-private func addFloorGrid(to parent: Entity, floorSize: SIMD2<Float>) {
-    var gridMat = SimpleMaterial()
-    gridMat.color = .init(tint: .init(red: 0.60, green: 0.72, blue: 0.90, alpha: 1.0))
-    gridMat.roughness = .float(1.0)
-
-    let lineH: Float = 0.001
-    let lineT: Float = 0.002
-    let step:  Float = 0.06
-    let yPos:  Float = 0.003
-
-    var x = -floorSize.x / 2 + step
-    while x < floorSize.x / 2 {
-        let e = ModelEntity(
-            mesh: MeshResource.generateBox(width: lineT, height: lineH, depth: floorSize.y),
-            materials: [gridMat]
-        )
-        e.position = [x, yPos, 0]
-        parent.addChild(e)
-        x += step
+private func isDescendant(of ancestorName: String, entity: Entity) -> Bool {
+    var current: Entity? = entity.parent
+    while let e = current {
+        if e.name == ancestorName { return true }
+        current = e.parent
     }
-    var z = -floorSize.y / 2 + step
-    while z < floorSize.y / 2 {
-        let e = ModelEntity(
-            mesh: MeshResource.generateBox(width: floorSize.x, height: lineH, depth: lineT),
-            materials: [gridMat]
-        )
-        e.position = [0, yPos, z]
-        parent.addChild(e)
-        z += step
+    return false
+}
+
+// MARK: - Floor Grid
+
+/// Casts a downward ray at each cell center to determine walkability. Must run AFTER
+/// the tabletop has been added to the RealityView content (so `.scene` is non-nil).
+@MainActor
+func computeFloorGrid(tabletop: Entity, roomBoundsLocal: BoundingBox) -> FloorGrid {
+    let cellSize: Float = 0.025
+    let width = roomBoundsLocal.max.x - roomBoundsLocal.min.x
+    let depth = roomBoundsLocal.max.z - roomBoundsLocal.min.z
+    let cols = max(1, Int(width / cellSize))
+    let rows = max(1, Int(depth / cellSize))
+    let origin = SIMD3<Float>(roomBoundsLocal.min.x, 0.0, roomBoundsLocal.min.z)
+
+    var walkable = Array(repeating: Array(repeating: false, count: cols), count: rows)
+    let fire = Array(repeating: Array(repeating: 0, count: cols), count: rows)
+
+    guard let scene = tabletop.scene else {
+        print("⚠️ computeFloorGrid: tabletop not yet in scene, returning empty grid")
+        return FloorGrid(cols: cols, rows: rows, cellSize: cellSize,
+                         originLocal: origin, walkable: walkable, fireIntensity: fire)
     }
+
+    let floorTolerance: Float = 0.015
+    let rayHeight: Float = 0.4
+
+    for row in 0..<rows {
+        for col in 0..<cols {
+            let localCenter = SIMD3<Float>(
+                origin.x + (Float(col) + 0.5) * cellSize,
+                rayHeight,
+                origin.z + (Float(row) + 0.5) * cellSize
+            )
+            let originWorld = tabletop.convert(position: localCenter, to: nil)
+            let endLocal    = SIMD3<Float>(localCenter.x, -0.1, localCenter.z)
+            let endWorld    = tabletop.convert(position: endLocal, to: nil)
+
+            let hits = scene.raycast(from: originWorld, to: endWorld)
+            let topmostY = hits
+                .map { tabletop.convert(position: $0.position, from: nil).y }
+                .max() ?? -Float.infinity
+
+            walkable[row][col] = abs(topmostY - 0.0) < floorTolerance
+        }
+    }
+
+    let grid = FloorGrid(cols: cols, rows: rows, cellSize: cellSize,
+                         originLocal: origin, walkable: walkable, fireIntensity: fire)
+    print("🟩 Floor grid: \(grid.walkableCount)/\(cols * rows) walkable cells (\(cols)×\(rows))")
+    return grid
+}
+
+func buildGridOverlay(_ grid: FloorGrid) -> Entity {
+    let overlay = Entity()
+    overlay.name = "gridOverlay"
+    let liftY: Float = 0.003
+    let lineT: Float = 0.0008
+    let totalW = Float(grid.cols) * grid.cellSize
+    let totalD = Float(grid.rows) * grid.cellSize
+
+    let lineMat = UnlitMaterial(color: UIColor.white.withAlphaComponent(0.15))
+    for i in 0...grid.cols {
+        let x = grid.originLocal.x + Float(i) * grid.cellSize
+        let mesh = MeshResource.generateBox(width: lineT, height: 0.0005, depth: totalD)
+        let e = ModelEntity(mesh: mesh, materials: [lineMat])
+        e.position = [x, liftY, grid.originLocal.z + totalD / 2]
+        overlay.addChild(e)
+    }
+    for j in 0...grid.rows {
+        let z = grid.originLocal.z + Float(j) * grid.cellSize
+        let mesh = MeshResource.generateBox(width: totalW, height: 0.0005, depth: lineT)
+        let e = ModelEntity(mesh: mesh, materials: [lineMat])
+        e.position = [grid.originLocal.x + totalW / 2, liftY, z]
+        overlay.addChild(e)
+    }
+
+    let blockedMat = UnlitMaterial(color: UIColor.red.withAlphaComponent(0.12))
+    for row in 0..<grid.rows {
+        for col in 0..<grid.cols {
+            guard !grid.walkable[row][col] else { continue }
+            let mesh = MeshResource.generateBox(
+                width: grid.cellSize * 0.9,
+                height: 0.0005,
+                depth: grid.cellSize * 0.9
+            )
+            let e = ModelEntity(mesh: mesh, materials: [blockedMat])
+            e.position = grid.cellCenterLocal(col: col, row: row) + [0, liftY, 0]
+            overlay.addChild(e)
+        }
+    }
+    return overlay
 }
 
 // MARK: - Placed Item Helpers
@@ -185,7 +211,6 @@ struct SceneView: View {
     @Binding var screen: AppScreen
     @Environment(SceneViewModel.self) var viewModel
 
-    @State private var dragDelta: SIMD3<Float> = .zero
     @State private var scaleDelta: Float = 1.0
     @State private var rotationDelta: Float = 0.0
 
@@ -196,27 +221,46 @@ struct SceneView: View {
     var layout: LayoutConfig { LayoutConfig.all.first { $0.id == layoutID }! }
 
     var body: some View {
-        RealityView { content in
-            let tabletop = buildTabletop(layout: layout)
+        RealityView { content, attachments in
+            let tabletop = await loadRoomEntity()
             tabletop.position = viewModel.tabletopTranslation
             tabletop.orientation = baseTilt
             content.add(tabletop)
             viewModel.tabletopAnchor = tabletop
-        } update: { content in
+
+            // Compute walkability grid from the loaded room, then add visual overlay.
+            // Must run AFTER content.add(tabletop) so tabletop.scene is available for raycasts.
+            if let room = tabletop.findEntity(named: "roomModel") {
+                let boundsLocal = room.visualBounds(relativeTo: tabletop)
+                let grid = computeFloorGrid(tabletop: tabletop, roomBoundsLocal: boundsLocal)
+                viewModel.floorGrid = grid
+                let overlay = buildGridOverlay(grid)
+                tabletop.addChild(overlay)
+            }
+
+            // Billboarded palette: fixed position to the right of the tabletop,
+            // rotates around Y to always face the user.
+            if let palette = attachments.entity(for: "palette") {
+                palette.name = "paletteAttachment"
+                palette.position = [0.65, 0.05, 0.2]
+                palette.components.set(BillboardComponent())
+                content.add(palette)
+            }
+        } update: { content, _ in
             guard let tabletop = content.entities.first(where: { $0.name == "tabletopGroup" }) else { return }
-            tabletop.position = viewModel.tabletopTranslation + dragDelta
+            tabletop.position = viewModel.tabletopTranslation
             tabletop.scale    = SIMD3(repeating: viewModel.tabletopScale * scaleDelta)
             let yRot = simd_quatf(angle: viewModel.tabletopRotationY + rotationDelta, axis: [0, 1, 0])
             tabletop.orientation = yRot * baseTilt
+        } attachments: {
+            Attachment(id: "palette") {
+                ItemPaletteView()
+                    .environment(viewModel)
+            }
         }
-        .simultaneousGesture(dragGesture)
         .simultaneousGesture(magnifyGesture)
         .simultaneousGesture(rotateGesture)
         .simultaneousGesture(tapGesture)
-        // Nav bar: contentAlignment .bottom means the bar's bottom edge sits at the
-        // window's top edge — the entire bar floats above the window volume.
-        // The trailing panel (centered on the right edge) has its top above the window's
-        // top edge too, so both "Items" and the nav bar end up at the same height.
         .ornament(attachmentAnchor: .scene(.top), contentAlignment: .bottom) {
             HStack(spacing: 14) {
                 Button {
@@ -237,28 +281,9 @@ struct SceneView: View {
             .padding(.vertical, 12)
             .glassBackgroundEffect()
         }
-        // Item palette — to the right of the window, clear of the layout
-        .ornament(attachmentAnchor: .scene(.trailing)) {
-            ItemPaletteView()
-                .environment(viewModel)
-        }
     }
 
     // MARK: - Gestures
-
-    private var dragGesture: some Gesture {
-        DragGesture()
-            .targetedToAnyEntity()
-            .onChanged { value in
-                let t = value.translation3D
-                dragDelta = SIMD3(Float(t.x), Float(t.y), Float(t.z))
-            }
-            .onEnded { value in
-                let t = value.translation3D
-                viewModel.tabletopTranslation += SIMD3(Float(t.x), Float(t.y), Float(t.z))
-                dragDelta = .zero
-            }
-    }
 
     private var magnifyGesture: some Gesture {
         MagnifyGesture()
@@ -310,14 +335,24 @@ struct SceneView: View {
             return
         }
 
-        guard tappedEntity.name == "floorPlane",
-              let itemType = viewModel.selectedItemType,
-              let tabletop = viewModel.tabletopAnchor else { return }
+        guard let itemType = viewModel.selectedItemType,
+              let tabletop = viewModel.tabletopAnchor,
+              let grid = viewModel.floorGrid,
+              tappedEntity.name != "paletteAttachment",
+              !isDescendant(of: "paletteAttachment", entity: tappedEntity) else { return }
 
         let worldLocation = value.convert(value.location3D, from: .local, to: .scene)
         let localLocation = tabletop.convert(position: worldLocation, from: nil)
 
-        let placed = viewModel.placeItem(itemType, at: localLocation)
+        // Snap to nearest cell + reject if cell is blocked
+        guard let (col, row) = grid.cellAt(local: localLocation),
+              grid.isWalkable(col: col, row: row) else {
+            print("🚫 Tap outside grid or on blocked cell")
+            return
+        }
+        let snappedLocal = grid.cellCenterLocal(col: col, row: row)
+
+        let placed = viewModel.placeItem(itemType, at: snappedLocal)
         let placedEntity = buildPlacedItemEntity(placed)
         tabletop.addChild(placedEntity)
     }
@@ -326,10 +361,11 @@ struct SceneView: View {
 
     private func resetViewModel() {
         viewModel.tabletopAnchor = nil
+        viewModel.floorGrid = nil
         viewModel.selectedItemType = nil
         viewModel.selectedPlacedItemID = nil
         viewModel.placedItems = []
-        viewModel.tabletopTranslation = [-0.2, -0.15, 0.0]
+        viewModel.tabletopTranslation = [-0.15, -0.15, 0.15]
         viewModel.tabletopScale = 1.0
         viewModel.tabletopRotationY = 0.0
     }

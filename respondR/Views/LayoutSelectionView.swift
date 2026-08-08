@@ -4,36 +4,38 @@ struct LayoutSelectionView: View {
     @Binding var screen: AppScreen
 
     var body: some View {
-        VStack(spacing: 32) {
-            HStack {
-                Button {
-                    screen = .phaseSelection
-                } label: {
+        BillboardedPanel {
+            VStack(spacing: 32) {
+                HStack {
+                    Button {
+                        screen = .phaseSelection
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                            .font(.body.weight(.medium))
+                    }
+                    Spacer()
+                    Text("Select Layout")
+                        .font(.title2.bold())
+                    Spacer()
                     Label("Back", systemImage: "chevron.left")
                         .font(.body.weight(.medium))
+                        .opacity(0)
                 }
-                Spacer()
-                Text("Select Layout")
-                    .font(.title2.bold())
-                Spacer()
-                Label("Back", systemImage: "chevron.left")
-                    .font(.body.weight(.medium))
-                    .opacity(0)
-            }
 
-            HStack(spacing: 24) {
-                ForEach(LayoutConfig.all) { layout in
-                    Button {
-                        screen = .liveScene(layout: layout.id)
-                    } label: {
-                        LayoutCard(layout: layout)
+                HStack(spacing: 24) {
+                    ForEach(LayoutConfig.all) { layout in
+                        Button {
+                            screen = .liveScene(layout: layout.id)
+                        } label: {
+                            LayoutCard(layout: layout)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
+            .padding(40)
+            .glassBackgroundEffect()
         }
-        .padding(40)
-        .glassBackgroundEffect()
     }
 }
 
