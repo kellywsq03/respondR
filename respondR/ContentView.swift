@@ -69,7 +69,9 @@ struct ContentView: View {
             case .layoutSelection:
                 LayoutSelectionView(screen: $screen)
             case .liveScene(let layoutID):
-                SceneView(layoutID: layoutID, screen: $screen)
+                SceneView(layoutID: layoutID, assetName: nil, screen: $screen)
+            case .liveSceneAsset(let assetName):
+                SceneView(layoutID: nil, assetName: assetName, screen: $screen)
             case .phaseTwo:
                 BillboardedPanel {
                     ControlWindowView(screen: $screen)
