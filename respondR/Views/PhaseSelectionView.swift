@@ -47,6 +47,7 @@ struct PhaseSelectionView: View {
                                 do {
                                     try await viewModel.preloadPhase1Assets()
                                 } catch {
+                                    print("Phase I preload error:", error)
                                     preloadErrorMessage = "Unable to download assets for Phase I. Please try again."
                                     isPreloadingPhase1 = false
                                     return

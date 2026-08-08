@@ -4,24 +4,21 @@ import Supabase
 struct SupabaseConfig {
     static let projectUrlString = "https://ikswhcyfnqipzakncruf.supabase.co"
     static let bucketName = "assets"
-
-    static var apiKey: String? {
-        Bundle.main.object(forInfoDictionaryKey: "SUPABASE_KEY") as? String
-    }
-
-    static var storageBaseURL: URL {
-        guard let url = URL(string: projectUrlString) else {
-            fatalError("Supabase project URL is invalid. Update SupabaseConfig.projectUrlString with your project URL.")
-        }
-        return url.appendingPathComponent("storage/v1/object/public/")
-            .appendingPathComponent(bucketName)
-    }
 }
 
 struct SupabaseAssetLoader {
+
     static func downloadAllUSDZAssets() async throws {
-        guard let apiKey = SupabaseConfig.apiKey else {
-            fatalError("Missing Supabase API key. Add SUPABASE_KEY to Info.plist or the app environment.")
+
+        guard let apiKey = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_KEY") as? String else {
+            throw NSError(
+               domain: "Supabase",
+               code: 1,
+               userInfo: [
+                   NSLocalizedDescriptionKey:
+                       "SUPABASE_KEY not found in Info.plist"
+               ]
+           )
         }
 
         let client = SupabaseClient(
@@ -41,10 +38,15 @@ struct SupabaseAssetLoader {
                 )
             )
 
+        let fileManager = FileManager.default
         let itemsURL = URL(fileURLWithPath: "items", isDirectory: true)
+        if !fileManager.fileExists(atPath: itemsURL.path) {
+            try fileManager.createDirectory(at: itemsURL, withIntermediateDirectories: true)
+        }
 
         for file in files where file.name.lowercased().hasSuffix(".usdz") {
             let data = try await client.storage.from(SupabaseConfig.bucketName).download(path: file.name)
+            print("Downloaded: \(file.name)")
             let fileURL = itemsURL.appendingPathComponent(file.name)
 
             try data.write(to: fileURL)
