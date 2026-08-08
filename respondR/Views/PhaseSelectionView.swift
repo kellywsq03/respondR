@@ -2,7 +2,6 @@ import SwiftUI
 
 struct PhaseSelectionView: View {
     @Binding var screen: AppScreen
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         BillboardedPanel {
@@ -34,7 +33,6 @@ struct PhaseSelectionView: View {
 
                     Button {
                         screen = .phaseTwo
-                        openWindow(id: AppSceneID.phase2Controls)
                     } label: {
                         PhaseCard(
                             phase: "Phase II",
