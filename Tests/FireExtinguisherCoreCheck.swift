@@ -62,6 +62,10 @@ enum FireExtinguisherCoreCheck {
         )
         require(manual.activeCount == 1, "uncovered fire must remain active")
         require(manual.drainNewlyBurnt().isEmpty, "manual removal must not queue char")
+        require(
+            !manual.ignite(at: onAxis, now: 1),
+            "extinguished fire must not re-ignite"
+        )
 
         let natural = FireSimulation(
             cellSize: 0.30,

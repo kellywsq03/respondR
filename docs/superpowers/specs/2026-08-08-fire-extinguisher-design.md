@@ -40,7 +40,7 @@ Spray geometry is represented independently from RealityKit rendering by an apex
 Manual extinguishing follows a separate lifecycle path from natural burnout:
 
 - An extinguished cell is removed from the active runtime set immediately.
-- It can no longer spread fire.
+- It can no longer spread fire or be re-ignited during that session.
 - It is absent from the positions used by the proximity-damage calculation, so it stops damaging the player on the same simulation update.
 - It is not added to the naturally burnt-out set or newly-burnt queue.
 - It therefore creates no black char mark.

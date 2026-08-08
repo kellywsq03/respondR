@@ -172,7 +172,7 @@ git commit -m 'test: define extinguisher spray geometry'
 
 - [ ] **Step 1: Replace `runSimulationChecks()` with failing behavior checks**
 
-Use a 0.30-metre grid, insert three literal cell centres, ignite the two forward cells, extinguish with a narrow two-metre cone, and assert that only the on-axis fire disappears and `drainNewlyBurnt()` stays empty. In a second simulation with a 0.1-second burn duration, advance ignition and burn ticks and assert natural burnout still queues one char position.
+Use a 0.30-metre grid, insert literal cell centres, ignite the two forward cells, extinguish with a narrow two-metre cone, and assert that only the on-axis fire disappears, cannot re-ignite, and leaves `drainNewlyBurnt()` empty. In a second simulation with a 0.1-second burn duration, advance ignition and burn ticks and assert natural burnout still queues one char position.
 
 ```swift
 static func runSimulationChecks() {
@@ -187,6 +187,7 @@ static func runSimulationChecks() {
     require(manual.extinguish(in: cone).count == 1, "cone must remove only the covered fire")
     require(manual.activeCount == 1, "uncovered fire must remain active")
     require(manual.drainNewlyBurnt().isEmpty, "manual removal must not queue char")
+    require(!manual.ignite(at: onAxis, now: 1), "extinguished fire must not re-ignite")
 
     let natural = FireSimulation(cellSize: 0.30, ignitionDuration: 0.1, burnDuration: 0.1, spreadInterval: 100)
     natural.insertGeometry([onAxis])
@@ -204,7 +205,7 @@ Run the Task 1 command with all pure sources. Expected: compilation fails becaus
 
 - [ ] **Step 3: Implement the manual removal path**
 
-Iterate over a snapshot of `runtime.keys`; when the cell centre is inside the cone using `grid.cellSize * 0.5` as padding, remove it from `runtime` and append its centre to the return value. Do not mutate `burnt` or `pendingBurnt`.
+Iterate over a snapshot of `runtime.keys`; when the cell centre is inside the cone using `grid.cellSize * 0.5` as padding, remove it from `runtime`, add it to a separate terminal `extinguished` set, and append its centre to the return value. The ignition guard rejects both burnt and extinguished cells. Do not mutate `burnt` or `pendingBurnt`, and clear `extinguished` on reset.
 
 ```swift
 @discardableResult
@@ -214,6 +215,7 @@ func extinguish(in cone: SprayCone) -> [SIMD3<Float>] {
         let position = grid.center(of: coord)
         if cone.contains(position, padding: grid.cellSize * 0.5) {
             runtime[coord] = nil
+            extinguished.insert(coord)
             removed.append(position)
         }
     }

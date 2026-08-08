@@ -28,6 +28,8 @@ final class FireSimulation {
     private var runtime: [SIMD3<Int32>: Runtime] = [:]
     /// Cells that have burnt out; never re-ignite.
     private var burnt: Set<SIMD3<Int32>> = []
+    /// Cells manually extinguished; terminal like burnt cells, but never charred.
+    private var extinguished: Set<SIMD3<Int32>> = []
     /// World positions of cells that burnt out since the last `drainNewlyBurnt()` call.
     private var pendingBurnt: [SIMD3<Float>] = []
 
@@ -62,7 +64,10 @@ final class FireSimulation {
 
     @discardableResult
     private func igniteCell(_ c: SIMD3<Int32>, now: TimeInterval) -> Bool {
-        guard runtime[c] == nil, !burnt.contains(c), runtime.count < maxActive
+        guard runtime[c] == nil,
+              !burnt.contains(c),
+              !extinguished.contains(c),
+              runtime.count < maxActive
         else { return false }
         runtime[c] = Runtime(
             state: .igniting,
@@ -126,6 +131,7 @@ final class FireSimulation {
             let position = grid.center(of: coord)
             if cone.contains(position, padding: grid.cellSize * 0.5) {
                 runtime[coord] = nil
+                extinguished.insert(coord)
                 removed.append(position)
             }
         }
@@ -142,6 +148,7 @@ final class FireSimulation {
     func reset() {
         runtime.removeAll()
         burnt.removeAll()
+        extinguished.removeAll()
         pendingBurnt.removeAll()
     }
 }
