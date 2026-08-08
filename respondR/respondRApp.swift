@@ -25,6 +25,14 @@ struct respondRApp: App {
         .defaultSize(width: 2.2, height: 1.0, depth: 1.5, in: .meters)
 
         ImmersiveSpace(id: "MeshSpace") {
+        WindowGroup(id: AppSceneID.phase2Controls) {
+            ControlWindowView()
+                .environment(appModel)
+                .frame(width: 360, height: appModel.mode == .fire ? 560 : 340)
+        }
+        .windowResizability(.contentSize)
+
+        ImmersiveSpace(id: AppSceneID.meshSpace) {
             ImmersiveMeshView()
                 .environment(appModel)
         }

@@ -1,4 +1,5 @@
 import ARKit
+import QuartzCore
 import RealityKit
 import SwiftUI
 import UIKit
@@ -13,7 +14,9 @@ import UIKit
 final class MeshScanner {
     private let session = ARKitSession()
     private let sceneReconstruction = SceneReconstructionProvider()
+    private let worldTracking = WorldTrackingProvider()
     private let rootEntity: Entity
+    private var worldTrackingRunning = false
 
     enum Mode { case wireframe, fire }
     var mode: Mode = .wireframe
@@ -34,9 +37,15 @@ final class MeshScanner {
         print("MeshDebug: MeshScanner.start; isSupported=\(SceneReconstructionProvider.isSupported)")
         guard SceneReconstructionProvider.isSupported else { return }
         do {
-            try await session.run([sceneReconstruction])
+            var providers: [any DataProvider] = [sceneReconstruction]
+            if WorldTrackingProvider.isSupported {
+                providers.append(worldTracking)
+                worldTrackingRunning = true
+            }
+            try await session.run(providers)
             print("MeshDebug: ARKit session.run succeeded")
         } catch {
+            worldTrackingRunning = false
             print("MeshScanner: failed to start session: \(error)")
             return
         }
@@ -56,6 +65,7 @@ final class MeshScanner {
 
     func stop() {
         session.stop()
+        worldTrackingRunning = false
         for entity in meshEntities.values { entity.removeFromParent() }
         meshEntities.removeAll()
         exportGeometry.removeAll()
@@ -72,6 +82,17 @@ final class MeshScanner {
         for entity in meshEntities.values {
             entity.model?.materials = [mat]
         }
+    }
+
+    /// Returns the tracked device pose in the same world coordinate space as
+    /// the reconstructed mesh and fire-cell positions.
+    func queryHeadTransform() -> simd_float4x4? {
+        guard worldTrackingRunning,
+              let anchor = worldTracking.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()),
+              anchor.isTracked else {
+            return nil
+        }
+        return anchor.originFromAnchorTransform
     }
 
     // MARK: - Internals

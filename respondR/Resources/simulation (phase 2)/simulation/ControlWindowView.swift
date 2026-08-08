@@ -50,7 +50,7 @@ struct ControlWindowView: View {
                         appModel.immersiveSpaceOpen = false
                     } else {
                         print("MeshDebug: Enter Mesh tapped, opening MeshSpace…")
-                        let result = await openImmersiveSpace(id: "MeshSpace")
+                        let result = await openImmersiveSpace(id: AppSceneID.meshSpace)
                         print("MeshDebug: openImmersiveSpace result = \(result)")
                         switch result {
                         case .opened:
@@ -86,10 +86,29 @@ struct ControlWindowView: View {
             .disabled(!appModel.immersiveSpaceOpen)
 
             if appModel.mode == .fire {
+                GroupBox("Responder Status") {
+                    VStack(spacing: 8) {
+                        LabeledContent("Health", value: "\(appModel.healthPercentage)%")
+                        ProgressView(value: appModel.health)
+                            .tint(appModel.isNearFire ? .red : .green)
+                        LabeledContent("Time", value: appModel.formattedTimeRemaining)
+                            .monospacedDigit()
+                        if appModel.isNearFire {
+                            Label("Fire proximity warning", systemImage: "flame.fill")
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
+
                 Button("Reset Fire") {
                     appModel.resetFireTrigger += 1
                 }
                 .disabled(!appModel.immersiveSpaceOpen)
+
+                Button("Reset HUD / Timer") {
+                    appModel.resetHUD()
+                    if appModel.immersiveSpaceOpen { appModel.startTimer() }
+                }
 
                 Text("Tap a surface to ignite.")
                     .font(.footnote).foregroundStyle(.secondary)
