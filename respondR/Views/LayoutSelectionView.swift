@@ -4,25 +4,20 @@ struct LayoutSelectionView: View {
     @Binding var screen: AppScreen
 
     var body: some View {
-        BillboardedPanel {
-            VStack(spacing: 32) {
-                HStack {
+        BillboardedPanel(initialScale: 5.0) {
+            VStack(spacing: 6) {
+                HStack(spacing: 6) {
                     Button {
                         screen = .phaseSelection
                     } label: {
-                        Label("Back", systemImage: "chevron.left")
-                            .font(.body.weight(.medium))
+                        Image(systemName: "chevron.left")
+                            .font(.caption.weight(.medium))
                     }
-                    Spacer()
                     Text("Select Layout")
-                        .font(.title2.bold())
-                    Spacer()
-                    Label("Back", systemImage: "chevron.left")
-                        .font(.body.weight(.medium))
-                        .opacity(0)
+                        .font(.caption.weight(.bold))
                 }
 
-                HStack(spacing: 24) {
+                HStack(spacing: 5) {
                     ForEach(LayoutConfig.all) { layout in
                         Button {
                             screen = .liveScene(layout: layout.id)
@@ -33,7 +28,8 @@ struct LayoutSelectionView: View {
                     }
                 }
             }
-            .padding(40)
+            .padding(6)
+            .fixedSize()
             .glassBackgroundEffect()
         }
     }
@@ -43,24 +39,24 @@ private struct LayoutCard: View {
     let layout: LayoutConfig
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 3) {
             FloorPlan2DView(layout: layout)
-                .frame(width: 200, height: 130)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .frame(width: 56, height: 38)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
                 )
-
             Text(layout.name)
-                .font(.headline)
+                .font(.system(size: 8, weight: .semibold))
+                .lineLimit(1)
         }
-        .padding(20)
+        .padding(4)
         .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
         )
         .hoverEffect()
     }

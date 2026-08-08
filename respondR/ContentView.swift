@@ -9,12 +9,19 @@ import SwiftUI
 import RealityKit
 
 /// Wraps SwiftUI content in a RealityView attachment with a BillboardComponent so it
-/// rotates to face the viewer as they move around the volumetric window.
-/// Supports pinch-to-zoom (0.5x–2.5x).
+/// rotates to face the viewer. Two-hand pinch (MagnifyGesture) zooms freely upward
+/// from `initialScale`, clamped `[0.6, 5.0]`.
 struct BillboardedPanel<Content: View>: View {
+    let initialScale: Float
     @ViewBuilder let content: () -> Content
-    @State private var panelScale: Float = 1.0
+    @State private var panelScale: Float
     @State private var pinchDelta: Float = 1.0
+
+    init(initialScale: Float = 1.8, @ViewBuilder content: @escaping () -> Content) {
+        self.initialScale = initialScale
+        self.content = content
+        self._panelScale = State(initialValue: initialScale)
+    }
 
     var body: some View {
         RealityView { rvContent, attachments in
@@ -40,7 +47,7 @@ struct BillboardedPanel<Content: View>: View {
                     pinchDelta = Float(value.magnification)
                 }
                 .onEnded { value in
-                    panelScale = max(0.5, min(2.5, panelScale * Float(value.magnification)))
+                    panelScale = max(0.6, min(5.0, panelScale * Float(value.magnification)))
                     pinchDelta = 1.0
                 }
         )

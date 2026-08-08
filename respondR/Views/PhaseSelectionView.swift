@@ -4,21 +4,21 @@ struct PhaseSelectionView: View {
     @Binding var screen: AppScreen
 
     var body: some View {
-        BillboardedPanel {
-            VStack(spacing: 40) {
-                VStack(spacing: 8) {
+        BillboardedPanel(initialScale: 3.6) {
+            VStack(spacing: 10) {
+                VStack(spacing: 2) {
                     Text("RespondR")
-                        .font(.system(size: 48, weight: .bold))
+                        .font(.system(size: 18, weight: .bold))
                     Text("Firefighter Training Platform")
-                        .font(.title3)
+                        .font(.system(size: 8))
                         .foregroundStyle(.secondary)
                 }
 
                 Text("Select Training Phase")
-                    .font(.title2)
+                    .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(.secondary)
 
-                HStack(spacing: 32) {
+                HStack(spacing: 8) {
                     Button {
                         screen = .layoutSelection
                     } label: {
@@ -44,7 +44,8 @@ struct PhaseSelectionView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(56)
+            .padding(8)
+            .fixedSize()
             .glassBackgroundEffect()
         }
     }
@@ -57,49 +58,49 @@ private struct PhaseCard: View {
     let locked: Bool
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 6) {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: icon)
-                    .font(.system(size: 40))
+                    .font(.system(size: 20))
                     .foregroundStyle(locked ? .secondary : .primary)
-                    .frame(width: 60, height: 60)
+                    .frame(width: 28, height: 28)
 
                 if locked {
                     Image(systemName: "lock.fill")
-                        .font(.caption.bold())
+                        .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(.secondary)
-                        .offset(x: 8, y: -8)
+                        .offset(x: 4, y: -4)
                 }
             }
 
-            VStack(spacing: 6) {
+            VStack(spacing: 2) {
                 Text(phase)
-                    .font(.title.bold())
+                    .font(.system(size: 12, weight: .bold))
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.system(size: 7))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
             }
 
             if locked {
                 Text("Coming Soon")
-                    .font(.caption2)
+                    .font(.system(size: 6))
                     .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
                     .background(.secondary.opacity(0.2))
                     .clipShape(Capsule())
             }
         }
-        .frame(width: 240, height: 180)
-        .padding(24)
+        .frame(width: 80, height: 80)
+        .padding(6)
         .background(.regularMaterial.opacity(locked ? 0.3 : 1.0))
-        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(
-            RoundedRectangle(cornerRadius: 24)
+            RoundedRectangle(cornerRadius: 10)
                 .stroke(
                     locked ? Color.secondary.opacity(0.2) : Color.white.opacity(0.3),
-                    lineWidth: 1
+                    lineWidth: 0.5
                 )
         )
         .opacity(locked ? 0.45 : 1.0)
