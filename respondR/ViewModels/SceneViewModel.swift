@@ -13,9 +13,9 @@ class SceneViewModel {
     var floorGrid: FloorGrid? = nil
 
     // Left of center (leaves room for trailing panel), below center (tabletop feel), forward toward viewer
-    var tabletopTranslation: SIMD3<Float> = [-0.15, -0.15, 0.15]
+    var tabletopTranslation: SIMD3<Float> = [-0.1, -0.1, 0.05]
     var tabletopScale: Float = 1.0
-    var tabletopRotationY: Float = 0.0
+    var tabletopRotation: simd_quatf = simd_quatf(angle: 0, axis: [0, 1, 0])
 
     func placeItem(_ type: ItemType, at localPosition: SIMD3<Float>) -> PlacedItem {
         let item = PlacedItem(id: UUID(), itemType: type, position: localPosition)

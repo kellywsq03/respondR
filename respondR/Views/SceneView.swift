@@ -36,11 +36,11 @@ func loadRoomEntity() async -> Entity {
 
     room.name = "roomModel"
 
-    // Fit the model into a ~0.6 m footprint centered at group origin, floor at y=0.
+    // Fit the model into a ~0.4 m footprint centered at group origin, floor at y=0.
     let bounds = room.visualBounds(relativeTo: nil)
     let size = bounds.max - bounds.min
     let maxHorizontal = max(size.x, size.z)
-    let targetSize: Float = 0.6
+    let targetSize: Float = 0.4
     let scale = maxHorizontal > 0 ? targetSize / maxHorizontal : 1.0
     room.scale = SIMD3(repeating: scale)
 
@@ -100,18 +100,20 @@ func computeFloorGrid(tabletop: Entity, roomBoundsLocal: BoundingBox) -> FloorGr
     let cols = max(1, Int(width / cellSize))
     let rows = max(1, Int(depth / cellSize))
     let origin = SIMD3<Float>(roomBoundsLocal.min.x, 0.0, roomBoundsLocal.min.z)
-
-    var walkable = Array(repeating: Array(repeating: false, count: cols), count: rows)
     let fire = Array(repeating: Array(repeating: 0, count: cols), count: rows)
 
     guard let scene = tabletop.scene else {
-        print("⚠️ computeFloorGrid: tabletop not yet in scene, returning empty grid")
+        print("⚠️ computeFloorGrid: tabletop not yet in scene")
         return FloorGrid(cols: cols, rows: rows, cellSize: cellSize,
-                         originLocal: origin, walkable: walkable, fireIntensity: fire)
+                         originLocal: origin, floorY: 0.0,
+                         walkable: Array(repeating: Array(repeating: false, count: cols), count: rows),
+                         fireIntensity: fire)
     }
 
-    let floorTolerance: Float = 0.015
-    let rayHeight: Float = 0.4
+    // Pass 1: cast a ray at each cell center, record the topmost hit's Y.
+    let rayHeight: Float = 0.5
+    let rayEndY:   Float = -0.2
+    var topmostY = Array(repeating: Array(repeating: -Float.infinity, count: cols), count: rows)
 
     for row in 0..<rows {
         for col in 0..<cols {
@@ -121,21 +123,36 @@ func computeFloorGrid(tabletop: Entity, roomBoundsLocal: BoundingBox) -> FloorGr
                 origin.z + (Float(row) + 0.5) * cellSize
             )
             let originWorld = tabletop.convert(position: localCenter, to: nil)
-            let endLocal    = SIMD3<Float>(localCenter.x, -0.1, localCenter.z)
-            let endWorld    = tabletop.convert(position: endLocal, to: nil)
-
+            let endWorld    = tabletop.convert(
+                position: SIMD3<Float>(localCenter.x, rayEndY, localCenter.z),
+                to: nil
+            )
             let hits = scene.raycast(from: originWorld, to: endWorld)
-            let topmostY = hits
-                .map { tabletop.convert(position: $0.position, from: nil).y }
-                .max() ?? -Float.infinity
+            if let maxY = hits.map({ tabletop.convert(position: $0.position, from: nil).y }).max() {
+                topmostY[row][col] = maxY
+            }
+        }
+    }
 
-            walkable[row][col] = abs(topmostY - 0.0) < floorTolerance
+    // Auto-detect floor Y: the lowest "topmost hit" across all cells that had a hit is
+    // the bare floor. Cells with walls/furniture on top will have larger topmost Y values.
+    let allHits = topmostY.flatMap { $0 }.filter { $0.isFinite }
+    let floorY = allHits.min() ?? 0.0
+
+    // Pass 2: walkable if topmost hit is close to detected floor Y (no obstacle on top).
+    let floorTolerance: Float = 0.015
+    var walkable = Array(repeating: Array(repeating: false, count: cols), count: rows)
+    for row in 0..<rows {
+        for col in 0..<cols {
+            let y = topmostY[row][col]
+            walkable[row][col] = y.isFinite && abs(y - floorY) < floorTolerance
         }
     }
 
     let grid = FloorGrid(cols: cols, rows: rows, cellSize: cellSize,
-                         originLocal: origin, walkable: walkable, fireIntensity: fire)
-    print("🟩 Floor grid: \(grid.walkableCount)/\(cols * rows) walkable cells (\(cols)×\(rows))")
+                         originLocal: origin, floorY: floorY,
+                         walkable: walkable, fireIntensity: fire)
+    print("🟩 Floor grid: \(grid.walkableCount)/\(cols * rows) walkable, detected floorY=\(floorY)")
     return grid
 }
 
@@ -217,7 +234,9 @@ func buildPlacedItemEntity(_ item: PlacedItem) -> ModelEntity {
     mat.roughness = .float(0.6)
     let entity = ModelEntity(mesh: mesh, materials: [mat])
     entity.name = "placed_\(item.id.uuidString)"
-    entity.position = SIMD3(item.position.x, yLift, item.position.z)
+    // item.position.y comes from grid.cellCenterLocal which is the detected floor Y;
+    // add yLift so the item sits ON the floor rather than embedded in it.
+    entity.position = SIMD3(item.position.x, item.position.y + yLift, item.position.z)
     entity.collision = CollisionComponent(shapes: [collisionShape])
     entity.components.set(InputTargetComponent())
     entity.components.set(HoverEffectComponent())
@@ -233,7 +252,7 @@ struct SceneView: View {
     @Environment(SceneViewModel.self) var viewModel
 
     @State private var scaleDelta: Float = 1.0
-    @State private var rotationDelta: Float = 0.0
+    @State private var rotationDelta: simd_quatf = simd_quatf(angle: 0, axis: [0, 1, 0])
     @State private var draggingItemID: UUID? = nil
     @State private var itemDragDelta: SIMD3<Float> = .zero
 
@@ -258,37 +277,65 @@ struct SceneView: View {
                 viewModel.floorGrid = computeFloorGrid(tabletop: tabletop, roomBoundsLocal: boundsLocal)
             }
 
-            // Billboarded palette: fixed position to the right of the tabletop,
-            // rotates around Y to always face the user.
+            // Billboarded palette to the right of the tabletop.
             if let palette = attachments.entity(for: "palette") {
                 palette.name = "paletteAttachment"
-                palette.position = [0.65, 0.05, 0.2]
+                palette.position = [0.25, 0.02, 0.05]
                 palette.components.set(BillboardComponent())
                 content.add(palette)
+            }
+
+            // Billboarded nav bar hovering above the tabletop.
+            if let navbar = attachments.entity(for: "navbar") {
+                navbar.name = "navbarAttachment"
+                navbar.position = [-0.1, 0.15, 0.05]
+                navbar.components.set(BillboardComponent())
+                content.add(navbar)
             }
         } update: { content, _ in
             guard let tabletop = content.entities.first(where: { $0.name == "tabletopGroup" }) else { return }
             tabletop.position = viewModel.tabletopTranslation
             tabletop.scale    = SIMD3(repeating: viewModel.tabletopScale * scaleDelta)
-            let yRot = simd_quatf(angle: viewModel.tabletopRotationY + rotationDelta, axis: [0, 1, 0])
-            tabletop.orientation = yRot * baseTilt
+            // Compose: baseTilt (fixed initial pose) → committed user rotation → in-progress gesture delta
+            tabletop.orientation = rotationDelta * viewModel.tabletopRotation * baseTilt
 
-            // Live drag preview for placed items
+            // Live drag preview for placed items — keep current Y (already correct
+            // relative to floor); only shift XZ by the accumulated drag delta.
             if let itemID = draggingItemID,
                let idx = viewModel.placedItems.firstIndex(where: { $0.id == itemID }),
                let entity = tabletop.findEntity(named: "placed_\(itemID.uuidString)") {
                 let base = viewModel.placedItems[idx].position
-                let yLift = entity.position.y  // preserve whatever lift the item was built with
-                entity.position = SIMD3(base.x + itemDragDelta.x, yLift, base.z + itemDragDelta.z)
+                entity.position = SIMD3(base.x + itemDragDelta.x, entity.position.y, base.z + itemDragDelta.z)
             }
         } attachments: {
             Attachment(id: "palette") {
                 ItemPaletteView()
                     .environment(viewModel)
             }
+            Attachment(id: "navbar") {
+                HStack(spacing: 14) {
+                    Button {
+                        resetViewModel()
+                        screen = .layoutSelection
+                    } label: {
+                        Label("Layouts", systemImage: "chevron.left")
+                            .font(.body.weight(.medium))
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                    Divider().frame(height: 18)
+                    Text(layout.name)
+                        .font(.body.weight(.semibold))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .glassBackgroundEffect()
+            }
         }
         .simultaneousGesture(magnifyGesture)
         .simultaneousGesture(rotateGesture)
+        .simultaneousGesture(rotationDragGesture)
         .simultaneousGesture(tapGesture)
         .simultaneousGesture(itemDragGesture)
         .onChange(of: viewModel.selectedItemType) { _, newValue in
@@ -311,26 +358,6 @@ struct SceneView: View {
             viewModel.selectedPlacedItemID = placed.id
             print("🔶 Spawned cone at tabletop-local \(entity.position), name=\(entity.name)")
         }
-        .ornament(attachmentAnchor: .scene(.top), contentAlignment: .bottom) {
-            HStack(spacing: 14) {
-                Button {
-                    resetViewModel()
-                    screen = .layoutSelection
-                } label: {
-                    Label("Layouts", systemImage: "chevron.left")
-                        .font(.body.weight(.medium))
-                        .lineLimit(1)
-                        .fixedSize()
-                }
-                Divider().frame(height: 18)
-                Text(layout.name)
-                    .font(.body.weight(.semibold))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .glassBackgroundEffect()
-        }
     }
 
     // MARK: - Gestures
@@ -348,15 +375,66 @@ struct SceneView: View {
             }
     }
 
+    /// Two-hand twist gesture. Free-axis (no constraint), so the room can yaw, pitch,
+    /// and roll on real AVP hardware. Diagnostic log confirms it fires and shows the
+    /// magnitude — useful when validating flipping behavior.
     private var rotateGesture: some Gesture {
-        RotateGesture3D(constrainedToAxis: .y)
+        RotateGesture3D()   // NO axis constraint — free 3D rotation
             .targetedToAnyEntity()
             .onChanged { value in
-                rotationDelta = Float(value.rotation.angle.radians)
+                rotationDelta = quatFromRotation3D(value.rotation)
             }
             .onEnded { value in
-                viewModel.tabletopRotationY += Float(value.rotation.angle.radians)
-                rotationDelta = 0.0
+                let delta = quatFromRotation3D(value.rotation)
+                let axis = value.rotation.axis
+                let angleDeg = value.rotation.angle.degrees
+                print("🔄 RotateGesture3D ended — angle=\(angleDeg)°, axis=(\(axis.x),\(axis.y),\(axis.z))")
+                viewModel.tabletopRotation = simd_normalize(delta * viewModel.tabletopRotation)
+                rotationDelta = simd_quatf(angle: 0, axis: [0, 1, 0])
+            }
+    }
+
+    /// Extract a `simd_quatf` from a Spatial `Rotation3D` unambiguously via imag/real
+    /// rather than relying on `.vector` component order.
+    private func quatFromRotation3D(_ rot: Rotation3D) -> simd_quatf {
+        let q = rot.quaternion
+        return simd_quatf(
+            ix: Float(q.imag.x),
+            iy: Float(q.imag.y),
+            iz: Float(q.imag.z),
+            r:  Float(q.real)
+        )
+    }
+
+    /// One-hand drag rotation for sim testing AND single-hand AVP use. Reads horizontal
+    /// screen drag as yaw (around Y) and vertical drag as pitch (around X). Long enough
+    /// vertical drag flips the room upside-down. Only fires on drags that DON'T start
+    /// on a placed item (so `itemDragGesture` still handles those).
+    private var rotationDragGesture: some Gesture {
+        DragGesture()
+            .targetedToAnyEntity()
+            .onChanged { value in
+                guard value.entity.components[PlacedItemComponent.self] == nil else { return }
+                let radPerPt: Float = 0.007   // ~0.4° per screen point
+                let dx = Float(value.translation.width)  * radPerPt
+                let dy = Float(value.translation.height) * radPerPt
+                let yaw   = simd_quatf(angle: dx, axis: SIMD3<Float>(0, 1, 0))
+                let pitch = simd_quatf(angle: dy, axis: SIMD3<Float>(1, 0, 0))
+                rotationDelta = yaw * pitch
+            }
+            .onEnded { value in
+                guard value.entity.components[PlacedItemComponent.self] == nil else { return }
+                let radPerPt: Float = 0.007
+                let dx = Float(value.translation.width)  * radPerPt
+                let dy = Float(value.translation.height) * radPerPt
+                let yaw   = simd_quatf(angle: dx, axis: SIMD3<Float>(0, 1, 0))
+                let pitch = simd_quatf(angle: dy, axis: SIMD3<Float>(1, 0, 0))
+                let delta = yaw * pitch
+                viewModel.tabletopRotation = simd_normalize(delta * viewModel.tabletopRotation)
+                rotationDelta = simd_quatf(angle: 0, axis: [0, 1, 0])
+                let yawDeg = dx * 180 / .pi
+                let pitchDeg = dy * 180 / .pi
+                print("🎡 DragRotate ended — yaw=\(yawDeg)°, pitch=\(pitchDeg)°")
             }
     }
 
@@ -417,10 +495,12 @@ struct SceneView: View {
                 )
 
                 let snapped = snapToGrid(candidate)
+                // Preserve the item's Y-lift offset above the floor while snapping XZ.
+                let originalLift = entity.position.y - viewModel.placedItems[idx].position.y
                 viewModel.placedItems[idx].position.x = snapped.x
+                viewModel.placedItems[idx].position.y = snapped.y
                 viewModel.placedItems[idx].position.z = snapped.z
-                let yLift = entity.position.y
-                entity.position = SIMD3(snapped.x, yLift, snapped.z)
+                entity.position = SIMD3(snapped.x, snapped.y + originalLift, snapped.z)
             }
     }
 
@@ -459,17 +539,15 @@ struct SceneView: View {
         tabletop.addChild(placedEntity)
     }
 
-    /// Snap a tabletop-local position to the nearest grid cell center. Falls back to
-    /// the raw position if the grid isn't ready or the point is outside grid bounds.
+    /// Snap a tabletop-local position to the nearest WALKABLE grid cell center.
+    /// If the tapped cell is blocked (wall/furniture), spirals outward to the nearest
+    /// open cell. Falls back to raw position if the grid isn't ready.
     private func snapToGrid(_ local: SIMD3<Float>) -> SIMD3<Float> {
-        guard let grid = viewModel.floorGrid,
-              let (col, row) = grid.cellAt(local: local) else {
+        guard let grid = viewModel.floorGrid else {
             return SIMD3(local.x, 0, local.z)
         }
-        return grid.cellCenterLocal(col: col, row: row)
+        return grid.nearestWalkableCenter(to: local) ?? SIMD3(local.x, grid.floorY, local.z)
     }
-
-    // MARK: - Helpers
 
     private func resetViewModel() {
         viewModel.tabletopAnchor = nil
@@ -477,8 +555,8 @@ struct SceneView: View {
         viewModel.selectedItemType = nil
         viewModel.selectedPlacedItemID = nil
         viewModel.placedItems = []
-        viewModel.tabletopTranslation = [-0.15, -0.15, 0.15]
+        viewModel.tabletopTranslation = [-0.1, -0.1, 0.05]
         viewModel.tabletopScale = 1.0
-        viewModel.tabletopRotationY = 0.0
+        viewModel.tabletopRotation = simd_quatf(angle: 0, axis: [0, 1, 0])
     }
 }
