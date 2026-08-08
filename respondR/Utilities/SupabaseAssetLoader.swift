@@ -20,9 +20,13 @@ struct SupabaseConfig {
 
 struct SupabaseAssetLoader {
     static func downloadAllUSDZAssets() async throws {
+        guard let apiKey = SupabaseConfig.apiKey else {
+            fatalError("Missing Supabase API key. Add SUPABASE_KEY to Info.plist or the app environment.")
+        }
+
         let client = SupabaseClient(
             supabaseURL: URL(string: SupabaseConfig.projectUrlString)!,
-            supabaseKey: SupabaseConfig.apiKey,
+            supabaseKey: apiKey,
             options: .init(auth: .init(emitLocalSessionAsInitialSession: true))
         )
 
