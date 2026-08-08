@@ -31,12 +31,17 @@ struct PhaseSelectionView: View {
                     }
                     .buttonStyle(.plain)
 
-                    PhaseCard(
-                        phase: "Phase II",
-                        subtitle: "Live Incident Response",
-                        icon: "flame.fill",
-                        locked: true
-                    )
+                    Button {
+                        screen = .phaseTwo
+                    } label: {
+                        PhaseCard(
+                            phase: "Phase II",
+                            subtitle: "Live Incident Response",
+                            icon: "flame.fill",
+                            locked: false
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(56)

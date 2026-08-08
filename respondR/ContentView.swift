@@ -60,6 +60,12 @@ struct ContentView: View {
         case .liveScene(let layoutID):
             SceneView(layoutID: layoutID, screen: $screen)
                 .environment(viewModel)
+        case .phaseTwo:
+            BillboardedPanel {
+                ControlWindowView(screen: $screen)
+                    .frame(width: 480)
+                    .glassBackgroundEffect()
+            }
         }
     }
 }

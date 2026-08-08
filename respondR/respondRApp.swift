@@ -10,6 +10,8 @@ import RealityKit
 
 @main
 struct respondRApp: App {
+    @State private var appModel = AppModel()
+
     init() {
         PlacedItemComponent.registerComponent()
     }
@@ -17,8 +19,15 @@ struct respondRApp: App {
     var body: some SwiftUI.Scene {
         WindowGroup {
             ContentView()
+                .environment(appModel)
         }
         .windowStyle(.volumetric)
         .defaultSize(width: 2.2, height: 1.0, depth: 1.5, in: .meters)
+
+        ImmersiveSpace(id: "MeshSpace") {
+            ImmersiveMeshView()
+                .environment(appModel)
+        }
+        .immersionStyle(selection: .constant(.mixed), in: .mixed)
     }
 }
