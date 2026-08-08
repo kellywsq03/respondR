@@ -70,6 +70,7 @@ struct ImmersiveMeshView: View {
             tickTask = nil
             scanner?.stop()
             appModel.exportHandler = nil
+            appModel.immersiveSpaceOpen = false
         }
     }
 }

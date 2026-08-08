@@ -1,15 +1,34 @@
 import SwiftUI
 
 struct ControlWindowView: View {
+    @Binding var screen: AppScreen
     @Environment(AppModel.self) private var appModel
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    @State private var isReturningToPhaseSelection = false
 
     var body: some View {
         @Bindable var appModel = appModel
 
         VStack(spacing: 20) {
-            Text("Spatial Meshing").font(.largeTitle)
+            HStack {
+                Button {
+                    Task { await returnToPhaseSelection() }
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                }
+                .disabled(isReturningToPhaseSelection)
+
+                Spacer()
+
+                Text("Spatial Meshing")
+                    .font(.largeTitle)
+
+                Spacer()
+
+                Label("Back", systemImage: "chevron.left")
+                    .hidden()
+            }
 
             Picker("Mode", selection: $appModel.mode) {
                 ForEach(AppModel.Mode.allCases) { m in Text(m.rawValue).tag(m) }
@@ -85,5 +104,20 @@ struct ControlWindowView: View {
             }
         }
         .padding(32)
+    }
+
+    private func returnToPhaseSelection() async {
+        guard !isReturningToPhaseSelection else { return }
+        isReturningToPhaseSelection = true
+
+        if appModel.immersiveSpaceOpen {
+            await dismissImmersiveSpace()
+            appModel.immersiveSpaceOpen = false
+        }
+
+        appModel.statusMessage = nil
+        appModel.errorMessage = nil
+        screen = .phaseSelection
+        isReturningToPhaseSelection = false
     }
 }
