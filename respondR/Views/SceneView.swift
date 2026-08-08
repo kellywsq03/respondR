@@ -281,6 +281,7 @@ struct SceneView: View {
             if let palette = attachments.entity(for: "palette") {
                 palette.name = "paletteAttachment"
                 palette.position = [0.25, 0.02, 0.05]
+                palette.scale = SIMD3(repeating: 1.8)   // bigger so text reads clearly
                 palette.components.set(BillboardComponent())
                 content.add(palette)
             }
@@ -289,15 +290,41 @@ struct SceneView: View {
             if let navbar = attachments.entity(for: "navbar") {
                 navbar.name = "navbarAttachment"
                 navbar.position = [-0.1, 0.15, 0.05]
+                navbar.scale = SIMD3(repeating: 1.5)    // bigger so it's easy to read
                 navbar.components.set(BillboardComponent())
                 content.add(navbar)
             }
         } update: { content, _ in
             guard let tabletop = content.entities.first(where: { $0.name == "tabletopGroup" }) else { return }
             tabletop.position = viewModel.tabletopTranslation
-            tabletop.scale    = SIMD3(repeating: viewModel.tabletopScale * scaleDelta)
+            let effectiveScale = viewModel.tabletopScale * scaleDelta
+            tabletop.scale    = SIMD3(repeating: effectiveScale)
             // Compose: baseTilt (fixed initial pose) → committed user rotation → in-progress gesture delta
             tabletop.orientation = rotationDelta * viewModel.tabletopRotation * baseTilt
+
+            // Push palette + navbar outward as the tabletop grows so they don't overlap.
+            // Palette moves horizontally with room size. Navbar only nudges slightly upward
+            // (room is thin) — additive formula keeps it inside the window at any scale.
+            let base = viewModel.tabletopTranslation
+            let roomHalfWidth: Float = 0.2       // targetSize 0.4 / 2
+            let roomHalfHeight: Float = 0.05     // approx (room is thin)
+            let paletteMargin: Float = 0.30      // 30cm clearance from room right edge
+            let navbarMargin: Float = 0.20       // 20cm clearance above room top
+            if let palette = content.entities.first(where: { $0.name == "paletteAttachment" }) {
+                palette.position = [
+                    base.x + roomHalfWidth * effectiveScale + paletteMargin,
+                    0.02,
+                    0.05
+                ]
+            }
+            if let navbar = content.entities.first(where: { $0.name == "navbarAttachment" }) {
+                let y = base.y + roomHalfHeight * effectiveScale + navbarMargin
+                navbar.position = [
+                    base.x,
+                    min(y, 0.45),   // clamp inside window (top face at y=0.5)
+                    0.05
+                ]
+            }
 
             // Live drag preview for placed items — keep current Y (already correct
             // relative to floor); only shift XZ by the accumulated drag delta.
@@ -370,7 +397,7 @@ struct SceneView: View {
             }
             .onEnded { value in
                 viewModel.tabletopScale *= Float(value.magnification)
-                viewModel.tabletopScale = max(0.3, min(3.0, viewModel.tabletopScale))
+                viewModel.tabletopScale = max(0.3, min(6.0, viewModel.tabletopScale))
                 scaleDelta = 1.0
             }
     }
@@ -556,7 +583,7 @@ struct SceneView: View {
         viewModel.selectedPlacedItemID = nil
         viewModel.placedItems = []
         viewModel.tabletopTranslation = [-0.1, -0.1, 0.05]
-        viewModel.tabletopScale = 1.0
+        viewModel.tabletopScale = 2.5
         viewModel.tabletopRotation = simd_quatf(angle: 0, axis: [0, 1, 0])
     }
 }
