@@ -5,20 +5,45 @@ struct LayoutSelectionView: View {
     @Environment(SceneViewModel.self) var viewModel
 
     var body: some View {
+<<<<<<< HEAD
         BillboardedPanel(initialScale: 7.5) {
             VStack(spacing: 6) {
                 HStack(spacing: 6) {
+=======
+        BillboardedPanel {
+            VStack(spacing: 32) {
+                // Header
+                HStack {
+>>>>>>> 29e401a (add scanned assets to view)
                     Button {
                         screen = .phaseSelection
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.caption.weight(.medium))
                     }
+<<<<<<< HEAD
                     Text("Select Layout")
                         .font(.caption.weight(.bold))
                 }
 
                 HStack(spacing: 5) {
+=======
+
+                    Spacer()
+
+                    Text("Select Layout")
+                        .font(.title2.bold())
+
+                    Spacer()
+
+                    Label("Back", systemImage: "chevron.left")
+                        .font(.body.weight(.medium))
+                        .opacity(0)
+                }
+
+                // Layouts
+                HStack(spacing: 24) {
+>>>>>>> 29e401a (add scanned assets to view)
                     ForEach(LayoutConfig.all) { layout in
                         Button {
                             screen = .liveScene(layout: layout.id)
@@ -29,28 +54,31 @@ struct LayoutSelectionView: View {
                     }
                 }
 
+                // Scanned assets
                 if !viewModel.preloadedAssetNames.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Downloaded Assets")
+                    VStack(spacing: 12) {
+                        Text("Scanned Assets")
                             .font(.title3.bold())
 
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 16) {
-                                ForEach(viewModel.preloadedAssetNames, id: \ .self) { assetName in
+                        HStack(spacing: 16) {
+                            ForEach(
+                                viewModel.preloadedAssetNames,
+                                id: \.self
+                            ) { assetName in
+                                Button {
+                                    screen = .liveSceneAsset(assetName: assetName)
+                                } label: {
                                     DownloadedAssetCard(assetName: assetName)
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(6)
             .fixedSize()
             .glassBackgroundEffect()
-            .onAppear {
-                print("Preloaded: \(viewModel.preloadedAssetNames)")
-            }
         }
     }
 }
@@ -68,24 +96,22 @@ private struct DownloadedAssetCard: View {
                     .font(.system(size: 24))
                     .foregroundStyle(.primary)
             }
-            .frame(width: 140, height: 92)
+            .frame(width: 200, height: 100)
 
             Text(assetName)
-                .font(.subheadline.weight(.semibold))
+                .font(.headline)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
 
-            Text("USDZ")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
-        .padding(12)
+        .padding(20)
         .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 20)
                 .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
+        .hoverEffect()
     }
 }
 
