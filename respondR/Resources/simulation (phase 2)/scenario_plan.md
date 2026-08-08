@@ -1,9 +1,5 @@
 # Phase 2 Fire Training Scenario Plan
 
-Status: Draft for review
-
-Platform: Apple Vision Pro, visionOS 27
-
 Scenario duration: Fixed at 5 minutes
 
 ## 1. Scenario purpose
