@@ -13,6 +13,7 @@ class SceneViewModel {
     var floorGrid: FloorGrid? = nil
 
     var phase1AssetsDownloaded = false
+    var preloadedAssetNames: [String] = []
 
     // Left of center (leaves room for trailing panel), below center (tabletop feel), forward toward viewer
     var tabletopTranslation: SIMD3<Float> = [-0.1, -0.1, 0.05]
@@ -20,7 +21,7 @@ class SceneViewModel {
     var tabletopRotation: simd_quatf = simd_quatf(angle: 0, axis: [0, 1, 0])
 
     func preloadPhase1Assets() async throws {
-        try await SupabaseAssetLoader.downloadAllUSDZAssets()
+        preloadedAssetNames = try await SupabaseAssetLoader.downloadAllUSDZAssets()
         phase1AssetsDownloaded = true
     }
 

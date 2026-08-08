@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LayoutSelectionView: View {
     @Binding var screen: AppScreen
+    @Environment(SceneViewModel.self) var viewModel
 
     var body: some View {
         BillboardedPanel(initialScale: 7.5) {
@@ -27,11 +28,64 @@ struct LayoutSelectionView: View {
                         .buttonStyle(.plain)
                     }
                 }
+
+                if !viewModel.preloadedAssetNames.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Downloaded Assets")
+                            .font(.title3.bold())
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 16) {
+                                ForEach(viewModel.preloadedAssetNames, id: \ .self) { assetName in
+                                    DownloadedAssetCard(assetName: assetName)
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .padding(6)
             .fixedSize()
             .glassBackgroundEffect()
+            .onAppear {
+                print("Preloaded: \(viewModel.preloadedAssetNames)")
+            }
         }
+    }
+}
+
+private struct DownloadedAssetCard: View {
+    let assetName: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.accentColor.opacity(0.16))
+
+                Image(systemName: "cube.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.primary)
+            }
+            .frame(width: 140, height: 92)
+
+            Text(assetName)
+                .font(.subheadline.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+
+            Text("USDZ")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 

@@ -8,7 +8,7 @@ struct SupabaseConfig {
 
 struct SupabaseAssetLoader {
 
-    static func downloadAllUSDZAssets() async throws {
+    static func downloadAllUSDZAssets() async throws -> [String] {
 
         guard let apiKey = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_KEY") as? String else {
             throw NSError(
@@ -30,13 +30,17 @@ struct SupabaseAssetLoader {
         let files = try await client.storage
             .from(SupabaseConfig.bucketName)
             .list(
-                path: "folder",
                 options: SearchOptions(
                     limit: 10,
                     offset: 0,
                     sortBy: SortBy(column: "name", order: "asc")
                 )
             )
+
+        print("Found \(files.count) files in Supabase bucket '\(SupabaseConfig.bucketName)'.")
+        for file in files {
+            print("  \(file.name)")
+        }
 
         let documentsURL = FileManager.default.urls(
             for: .documentDirectory,
@@ -50,7 +54,9 @@ struct SupabaseAssetLoader {
             withIntermediateDirectories: true
         )
 
-         for file in files where file.name.lowercased().hasSuffix(".usdz") {
+        var downloadedAssetNames: [String] = []
+
+        for file in files where file.name.lowercased().hasSuffix(".usdz") {
             let data = try await client.storage
                 .from(SupabaseConfig.bucketName)
                 .download(path: file.name)
@@ -62,8 +68,14 @@ struct SupabaseAssetLoader {
                 options: .atomic
             )
 
+            downloadedAssetNames.append(file.name)
+
             print("Downloaded \(file.name)")
             print("Saved to: \(destinationURL.path)")
+        }
+
+        return downloadedAssetNames.sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
         }
     }
 }
