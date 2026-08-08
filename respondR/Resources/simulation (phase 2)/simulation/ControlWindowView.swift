@@ -21,7 +21,7 @@ struct ControlWindowView: View {
 
                 Spacer()
 
-                Text("Spatial Meshing")
+                Text("Phase 2 Incident Response")
                     .font(.largeTitle)
 
                 Spacer()
@@ -93,6 +93,9 @@ struct ControlWindowView: View {
                             .tint(appModel.isNearFire ? .red : .green)
                         LabeledContent("Time", value: appModel.formattedTimeRemaining)
                             .monospacedDigit()
+                        LabeledContent("Casualties", value: appModel.casualtyProgress)
+                            .monospacedDigit()
+                        LabeledContent("Scenario", value: appModel.scenarioPhaseLabel)
                         if appModel.isNearFire {
                             Label("Fire proximity warning", systemImage: "flame.fill")
                                 .foregroundStyle(.red)
@@ -100,18 +103,45 @@ struct ControlWindowView: View {
                     }
                 }
 
-                Button("Reset Fire") {
-                    appModel.resetFireTrigger += 1
+                Button("Reset Scenario") {
+                    appModel.requestScenarioReset()
                 }
                 .disabled(!appModel.immersiveSpaceOpen)
 
-                Button("Reset HUD / Timer") {
-                    appModel.resetHUD()
-                    if appModel.immersiveSpaceOpen { appModel.startTimer() }
-                }
+#if DEBUG
+                GroupBox("Debug Event Preview") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("No anchor map or spatial casualty/exit entities are loaded.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
 
+                        Button("Rescue Next Casualty") {
+                            appModel.debugRescueNextCasualty()
+                        }
+                        .disabled(!appModel.isScenarioActive || appModel.remainingCasualties == 0)
+
+                        Button("Reach Exit") {
+                            appModel.recordExitReached()
+                        }
+                        .disabled(!appModel.isScenarioActive)
+
+                        Button("Expire Timer") {
+                            appModel.debugExpireTimer()
+                        }
+                        .disabled(!appModel.isScenarioActive)
+
+                        Button("Deplete Health") {
+                            appModel.debugDepleteHealth()
+                        }
+                        .disabled(!appModel.isScenarioActive)
+                    }
+                }
+#endif
+
+#if DEBUG
                 Text("Tap a surface to ignite.")
                     .font(.footnote).foregroundStyle(.secondary)
+#endif
             }
 
             if let status = appModel.statusMessage {
@@ -123,6 +153,9 @@ struct ControlWindowView: View {
             }
         }
         .padding(32)
+        .onChange(of: appModel.endTrainingTrigger) { _, _ in
+            Task { await returnToPhaseSelection() }
+        }
     }
 
     private func returnToPhaseSelection() async {
@@ -136,6 +169,7 @@ struct ControlWindowView: View {
 
         appModel.statusMessage = nil
         appModel.errorMessage = nil
+        appModel.stopScenario()
         screen = .phaseSelection
         isReturningToPhaseSelection = false
     }

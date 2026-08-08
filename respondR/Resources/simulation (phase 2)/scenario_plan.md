@@ -2,6 +2,59 @@
 
 Scenario duration: Fixed at 5 minutes
 
+## 0. Implementation status — 8 August 2026
+
+### Implemented now without the anchor map
+
+- Fixed `05:00` scenario timer and Preparing, Active, Victory, and Defeat states.
+- Registration of stable casualty IDs, idempotent rescue events, and `X/N` progress.
+- Victory when every registered casualty is rescued and the exit event occurs with time remaining.
+- Defeat on timeout, zero health, or an exit event with casualties left behind.
+- Fire is excluded from the victory condition.
+- Head-following casualty objective guidance in the existing HUD.
+- Interactive spatial victory/defeat debrief with completion time, casualty result, Try Again, and End Training.
+- Complete reset/end event paths for timer, health exposure, outcome, fire/char rendering, extinguisher spawn, spray cone, and hiss.
+- Debug-only event controls for Rescue Next Casualty, Reach Exit, Expire Timer, and Deplete Health.
+- Release behavior that remains in Preparing and reports the missing anchor map instead of inventing spatial content.
+
+Primary implementation files:
+
+- `simulation/ScenarioSession.swift`
+- `simulation/AppModel.swift`
+- `simulation/HUDView.swift`
+- `simulation/ScenarioResultView.swift`
+- `simulation/ImmersiveMeshView.swift`
+- `simulation/ControlWindowView.swift`
+
+### Debug behavior while the map is unavailable
+
+Debug builds register two non-spatial casualty IDs so the mission state, HUD, all outcome paths, debrief, and reset behavior can be exercised from the control window. This is event-only validation: it does not spawn a casualty, exit, authored fire, anchor, transform, or route.
+
+### Unable to implement until the anchor map is supplied
+
+- Importing and validating the real anchor map and its training-zone alignment reference.
+- Binding the five authored fire identifiers to real transforms.
+- Making authored blocking fires persist at those real locations until extinguished.
+- Binding real casualty identifiers to casualty assets and transforms.
+- Tapping a real casualty, removing its entity, and playing spatial rescue feedback.
+- Binding the single exit-door identifier to its real transform and proximity dwell zone.
+- Disabling free-form fire ignition in favor of authored scenario-fire startup.
+- Validating occlusion, reachability, alignment, collision, route safety, and exit accuracy.
+- Completing the required physical Vision Pro end-to-end scenario run.
+
+None of these blocked spatial features has been approximated with a temporary or head-relative placement.
+
+### Verification completed locally
+
+- Debug visionOS Simulator build passed with Swift warnings treated as errors.
+- Release visionOS Simulator build passed with Swift warnings treated as errors.
+- Generic visionOS device build passed with Swift warnings treated as errors and code signing disabled for local compilation.
+- Xcode static analysis passed for the Debug visionOS Simulator target.
+- `Info.plist` validation passed, and this plan is included in the built app bundle.
+- Release binary inspection confirmed that the Debug event-control labels are absent.
+
+The interactive mission flow has not been marked as physically validated. Scene reconstruction is unavailable in the simulator, and the final spatial route cannot be run until the anchor map is supplied and the app is exercised on a physical Apple Vision Pro.
+
 ## 1. Scenario purpose
 
 Phase 2 is a timed fire-response training scenario. The learner must move through the mapped training zone, use the fire extinguisher where necessary, rescue every casualty, find the exit door, and escape before the five-minute timer expires.

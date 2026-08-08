@@ -12,6 +12,7 @@ struct ImmersiveMeshView: View {
     @State private var fireExtinguisher: FireExtinguisherController?
     @State private var tickTask: Task<Void, Never>?
     @State private var hudEntity: Entity?
+    @State private var resultEntity: Entity?
 
     var body: some View {
         RealityView { content, attachments in
@@ -29,9 +30,13 @@ struct ImmersiveMeshView: View {
                     content.add(hud)
                     hudEntity = hud
                 }
+                if let result = attachments.entity(for: "scenario-result") {
+                    result.isEnabled = false
+                    content.add(result)
+                    resultEntity = result
+                }
 
-                appModel.resetHUD()
-                appModel.startTimer()
+                appModel.startScenarioForAvailableContent()
 
                 let sim = FireSimulation(cellSize: 0.30)
                 let renderer = FireRenderer(root: root)
@@ -52,8 +57,10 @@ struct ImmersiveMeshView: View {
                     appModel.errorMessage = message
                 }
                 self.fireExtinguisher = extinguisher
-                extinguisher.scheduleSpawn {
-                    scanner.queryHeadTransform()
+                if appModel.isScenarioActive {
+                    extinguisher.scheduleSpawn {
+                        scanner.queryHeadTransform()
+                    }
                 }
 
                 scanner.onGeometryUpdate = { positions in
@@ -69,18 +76,25 @@ struct ImmersiveMeshView: View {
 
                         let headTransform = scanner.queryHeadTransform()
                         extinguisher.update(deviceTransform: headTransform)
-                        if let sprayCone = extinguisher.activeSprayCone {
-                            sim.extinguish(in: sprayCone)
+                        let active: [SIMD3<Float>]
+                        if appModel.isScenarioActive {
+                            if let sprayCone = extinguisher.activeSprayCone {
+                                sim.extinguish(in: sprayCone)
+                            }
+                            sim.tick(now: now)
+                            active = sim.activePositions()
+                            renderer.sync(active: active)
+                            chars.addCompletedBurns(sim.drainNewlyBurnt())
+                        } else {
+                            extinguisher.endSpray()
+                            active = sim.activePositions()
                         }
-                        sim.tick(now: now)
-                        let active = sim.activePositions()
-                        renderer.sync(active: active)
-                        chars.addCompletedBurns(sim.drainNewlyBurnt())
-                        updateHUD(
+                        updateScenario(
                             elapsed: elapsed,
                             activeFirePositions: active,
                             headTransform: headTransform,
-                            hudEntity: hudEntity
+                            hudEntity: hudEntity,
+                            resultEntity: resultEntity
                         )
                         beat += 1
                         if beat % 20 == 0 {  // ~ every 2s
@@ -100,6 +114,10 @@ struct ImmersiveMeshView: View {
                     HUDView()
                         .environment(appModel)
                 }
+                Attachment(id: "scenario-result") {
+                    ScenarioResultView()
+                        .environment(appModel)
+                }
             }
         }
         .onChange(of: appModel.meshVisible) { _, visible in
@@ -112,18 +130,29 @@ struct ImmersiveMeshView: View {
             fireSim?.reset()
             fireRenderer?.clear()
             charRenderer?.clear()
-            appModel.resetHUD()
-            appModel.startTimer()
             appModel.errorMessage = nil
-            fireExtinguisher?.resetAndSchedule {
-                scanner?.queryHeadTransform()
+            appModel.startScenarioForAvailableContent()
+            if appModel.isScenarioActive {
+                fireExtinguisher?.resetAndSchedule {
+                    scanner?.queryHeadTransform()
+                }
+            } else {
+                fireExtinguisher?.cancel()
+            }
+        }
+        .onChange(of: appModel.scenarioPhase) { _, phase in
+            if phase != .active {
+                fireExtinguisher?.endSpray()
             }
         }
         .gesture(
             SpatialTapGesture()
                 .targetedToAnyEntity()
                 .onEnded { value in
-                    guard appModel.mode == .fire, let sim = fireSim else {
+                    guard appModel.mode == .fire,
+                          appModel.isScenarioActive,
+                          let sim = fireSim
+                    else {
                         return
                     }
                     if fireExtinguisher?.contains(value.entity) == true {
@@ -157,21 +186,27 @@ struct ImmersiveMeshView: View {
             fireExtinguisher = nil
             scanner?.stop()
             hudEntity = nil
-            appModel.pauseTimer()
-            appModel.updateHUD(deltaTime: 0, isNearActiveFire: false)
+            resultEntity = nil
+            appModel.stopScenario()
             appModel.exportHandler = nil
             appModel.immersiveSpaceOpen = false
         }
     }
 
-    private func updateHUD(
+    private func updateScenario(
         elapsed: TimeInterval,
         activeFirePositions: [SIMD3<Float>],
         headTransform: simd_float4x4?,
-        hudEntity: Entity?
+        hudEntity: Entity?,
+        resultEntity: Entity?
     ) {
+        hudEntity?.isEnabled = appModel.scenarioOutcome == nil
+        resultEntity?.isEnabled = appModel.scenarioOutcome != nil
+
         guard let headTransform else {
-            appModel.updateHUD(deltaTime: elapsed, isNearActiveFire: false)
+            appModel.updateScenario(deltaTime: elapsed, isNearActiveFire: false)
+            hudEntity?.isEnabled = appModel.scenarioOutcome == nil
+            resultEntity?.isEnabled = appModel.scenarioOutcome != nil
             return
         }
 
@@ -183,15 +218,18 @@ struct ImmersiveMeshView: View {
         let isNearFire = activeFirePositions.contains {
             simd_distance(headPosition, $0) < AppModel.fireProximityDistance
         }
-        appModel.updateHUD(deltaTime: elapsed, isNearActiveFire: isNearFire)
+        appModel.updateScenario(deltaTime: elapsed, isNearActiveFire: isNearFire)
 
         var offset = matrix_identity_float4x4
         offset.columns.3 = SIMD4<Float>(0, 0, -0.85, 1)
         hudEntity?.transform = Transform(matrix: headTransform * offset)
+        resultEntity?.transform = Transform(matrix: headTransform * offset)
+        hudEntity?.isEnabled = appModel.scenarioOutcome == nil
+        resultEntity?.isEnabled = appModel.scenarioOutcome != nil
     }
 
     private func handleSpatialEvents(_ events: SpatialEventCollection) {
-        guard let fireExtinguisher else { return }
+        guard appModel.isScenarioActive, let fireExtinguisher else { return }
 
         var hasActiveExtinguisherPinch = false
         var hasFinishedEvent = false

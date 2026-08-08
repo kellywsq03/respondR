@@ -7,7 +7,10 @@ struct HUDView: View {
     var body: some View {
         VStack {
             HStack {
-                healthPanel
+                VStack(alignment: .leading, spacing: 16) {
+                    healthPanel
+                    scenarioPanel
+                }
                 Spacer()
             }
 
@@ -92,6 +95,39 @@ struct HUDView: View {
         .accessibilityLabel("Time remaining")
         .accessibilityValue(appModel.formattedTimeRemaining)
         .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    private var scenarioPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(appModel.totalCasualties > 0 ? "CASUALTIES" : "SCENARIO")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                if appModel.totalCasualties > 0 {
+                    Spacer()
+                    Text(appModel.casualtyProgress)
+                        .font(.headline.monospacedDigit())
+                }
+            }
+
+            Text(appModel.missionGuidance)
+                .font(.callout.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(width: 248, alignment: .leading)
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .glassBackgroundEffect()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            appModel.totalCasualties > 0 ? "Casualty rescue progress" : "Scenario status"
+        )
+        .accessibilityValue(
+            appModel.totalCasualties > 0
+                ? "\(appModel.rescuedCasualties) of \(appModel.totalCasualties). \(appModel.missionGuidance)"
+                : appModel.missionGuidance
+        )
     }
 
     private func instructionPanel(_ guidance: String) -> some View {
