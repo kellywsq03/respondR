@@ -38,19 +38,32 @@ struct SupabaseAssetLoader {
                 )
             )
 
-        let fileManager = FileManager.default
-        let itemsURL = URL(fileURLWithPath: "items", isDirectory: true)
-        if !fileManager.fileExists(atPath: itemsURL.path) {
-            try fileManager.createDirectory(at: itemsURL, withIntermediateDirectories: true)
-        }
+        let documentsURL = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        )[0]
 
-        for file in files where file.name.lowercased().hasSuffix(".usdz") {
-            let data = try await client.storage.from(SupabaseConfig.bucketName).download(path: file.name)
-            print("Downloaded: \(file.name)")
-            let fileURL = itemsURL.appendingPathComponent(file.name)
+        let itemsURL = documentsURL.appendingPathComponent("items")
 
-            try data.write(to: fileURL)
-            print("Saved: \(fileURL.path)")
+        try FileManager.default.createDirectory(
+            at: itemsURL,
+            withIntermediateDirectories: true
+        )
+
+         for file in files where file.name.lowercased().hasSuffix(".usdz") {
+            let data = try await client.storage
+                .from(SupabaseConfig.bucketName)
+                .download(path: file.name)
+
+            let destinationURL = itemsURL.appendingPathComponent(file.name)
+
+            try data.write(
+                to: destinationURL,
+                options: .atomic
+            )
+
+            print("Downloaded \(file.name)")
+            print("Saved to: \(destinationURL.path)")
         }
     }
 }
