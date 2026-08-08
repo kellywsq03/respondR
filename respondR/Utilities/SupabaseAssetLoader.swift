@@ -19,7 +19,7 @@ struct SupabaseConfig {
 }
 
 struct SupabaseAssetLoader {
-    static func downloadAllUSDZAssets() async throws -> [String: Data] {
+    static func downloadAllUSDZAssets() async throws {
         let client = SupabaseClient(
             supabaseURL: URL(string: SupabaseConfig.projectUrlString)!,
             supabaseKey: SupabaseConfig.apiKey,
@@ -37,11 +37,14 @@ struct SupabaseAssetLoader {
                 )
             )
 
-        var downloadedAssets: [String: Data] = [:]
-        for file in files where file.name.lowercased().hasSuffix(".usdz") {
-            downloadedAssets[file.name] = try await client.storage.from(SupabaseConfig.bucketName).download(path: file.name)
-        }
+        let itemsURL = URL(fileURLWithPath: "items", isDirectory: true)
 
-        return downloadedAssets
+        for file in files where file.name.lowercased().hasSuffix(".usdz") {
+            let data = try await client.storage.from(SupabaseConfig.bucketName).download(path: file.name)
+            let fileURL = itemsURL.appendingPathComponent(file.name)
+
+            try data.write(to: fileURL)
+            print("Saved: \(fileURL.path)")
+        }
     }
 }
