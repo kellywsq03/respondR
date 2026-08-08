@@ -2,6 +2,9 @@ import SwiftUI
 
 struct PhaseSelectionView: View {
     @Binding var screen: AppScreen
+    @Environment(SceneViewModel.self) var viewModel
+    @State private var isPreloadingPhase1 = false
+    @State private var preloadErrorMessage: String?
 
     var body: some View {
         BillboardedPanel(initialScale: 5.5) {
@@ -18,9 +21,40 @@ struct PhaseSelectionView: View {
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(.secondary)
 
+                if isPreloadingPhase1 {
+                    HStack(spacing: 12) {
+                        ProgressView()
+                        Text("Preparing Phase I assets…")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let errorMessage = preloadErrorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                }
+
                 HStack(spacing: 8) {
                     Button {
-                        screen = .layoutSelection
+                        Task {
+                            if !viewModel.phase1AssetsDownloaded {
+                                isPreloadingPhase1 = true
+                                preloadErrorMessage = nil
+                                do {
+                                    try await viewModel.preloadPhase1Assets()
+                                } catch {
+                                    preloadErrorMessage = "Unable to download assets for Phase I. Please try again."
+                                    isPreloadingPhase1 = false
+                                    return
+                                }
+                                isPreloadingPhase1 = false
+                            }
+                            screen = .layoutSelection
+                        }
                     } label: {
                         PhaseCard(
                             phase: "Phase I",
@@ -30,6 +64,7 @@ struct PhaseSelectionView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .disabled(isPreloadingPhase1)
 
                     Button {
                         screen = .phaseTwo

@@ -62,20 +62,22 @@ struct ContentView: View {
     @State private var viewModel = SceneViewModel()
 
     var body: some View {
-        switch screen {
-        case .phaseSelection:
-            PhaseSelectionView(screen: $screen)
-        case .layoutSelection:
-            LayoutSelectionView(screen: $screen)
-        case .liveScene(let layoutID):
-            SceneView(layoutID: layoutID, screen: $screen)
-                .environment(viewModel)
-        case .phaseTwo:
-            BillboardedPanel {
-                ControlWindowView(screen: $screen)
-                    .frame(width: 480)
-                    .glassBackgroundEffect()
+        Group {
+            switch screen {
+            case .phaseSelection:
+                PhaseSelectionView(screen: $screen)
+            case .layoutSelection:
+                LayoutSelectionView(screen: $screen)
+            case .liveScene(let layoutID):
+                SceneView(layoutID: layoutID, screen: $screen)
+            case .phaseTwo:
+                BillboardedPanel {
+                    ControlWindowView(screen: $screen)
+                        .frame(width: 480)
+                        .glassBackgroundEffect()
+                }
             }
         }
+        .environment(viewModel)
     }
 }
