@@ -9,7 +9,7 @@ final class FireRenderer {
     private let capacity: Int
     private var pool: [Entity] = []
 
-    init(root: Entity, capacity: Int = 24) {
+    init(root: Entity, capacity: Int = 50) {
         self.capacity = capacity
         for _ in 0..<capacity {
             let e = Entity()

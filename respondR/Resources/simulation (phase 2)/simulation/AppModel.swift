@@ -7,7 +7,7 @@ import ARKit
 @MainActor
 final class AppModel {
     static let hudDuration: TimeInterval = 30 * 60
-    static let fireProximityDistance: Float = 0.5
+    static let fireProximityDistance: Float = 1
     static let fireExposureGracePeriod: TimeInterval = 3
     static let healthDrainRate: Double = 0.03
 

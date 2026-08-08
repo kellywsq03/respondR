@@ -32,9 +32,9 @@ struct ImmersiveMeshView: View {
                 appModel.resetHUD()
                 appModel.startTimer()
 
-                let sim = FireSimulation(cellSize: 0.15)
+                let sim = FireSimulation(cellSize: 0.30)
                 let renderer = FireRenderer(root: root)
-                let chars = CharRenderer(root: root, cellSize: 0.15) {
+                let chars = CharRenderer(root: root, cellSize: 0.30) {
                     position, radius in
                     scanner.makeCharPatch(near: position, radius: radius)
                 }
