@@ -76,5 +76,29 @@ enum FireExtinguisherCoreCheck {
         require(natural.activeCount == 0, "expired fire must leave the active set")
         require(natural.drainNewlyBurnt().count == 1, "natural burnout must queue char")
     }
-    static func runSessionChecks() {}
+    static func runSessionChecks() {
+        var session = FireExtinguisherSession()
+        require(session.phase == .waitingToSpawn, "session must start waiting")
+        require(!session.beginSpray(), "spray before pickup must be rejected")
+
+        session.didSpawn()
+        require(session.phase == .available, "spawn must make extinguisher available")
+        require(!session.beginSpray(), "available extinguisher must not spray before pickup")
+        require(session.pickUp(), "available extinguisher must be pickable")
+        require(session.phase == .equipped, "pickup must permanently equip")
+
+        require(session.beginSpray(), "held pinch must start spray")
+        require(session.isSpraying, "spray state must remain active while held")
+        session.endSpray()
+        require(
+            session.phase == .equipped && !session.isSpraying,
+            "release must stop spray but keep equipment"
+        )
+
+        session.reset()
+        require(
+            session.phase == .waitingToSpawn && !session.isSpraying,
+            "reset must clear equipment and spray"
+        )
+    }
 }
