@@ -20,21 +20,26 @@ final class FireSimulation {
     private let spreadFanout: Int
 
     private struct Runtime {
-        var state: CellState       // only .igniting or .burning live here
+        var state: CellState  // only .igniting or .burning live here
         var phaseEnd: TimeInterval
         var nextSpread: TimeInterval
     }
     /// Only igniting/burning cells live here — kept small (≤ maxActive).
     private var runtime: [SIMD3<Int32>: Runtime] = [:]
     /// Cells that have burnt out; never re-ignite.
+    /// Cells that have burnt out; never re-ignite.
     private var burnt: Set<SIMD3<Int32>> = []
+    /// World positions of cells that burnt out since the last `drainNewlyBurnt()` call.
+    private var pendingBurnt: [SIMD3<Float>] = []
 
-    init(cellSize: Float,
-         ignitionDuration: TimeInterval = 0.6,
-         burnDuration: TimeInterval = 10.0,
-         spreadInterval: TimeInterval = 1.5,
-         maxActive: Int = 150,
-         spreadFanout: Int = 3) {
+    init(
+        cellSize: Float,
+        ignitionDuration: TimeInterval = 0.6,
+        burnDuration: TimeInterval = 20.0,
+        spreadInterval: TimeInterval = 10,
+        maxActive: Int = 150,
+        spreadFanout: Int = 3
+    ) {
         self.grid = FireGrid(cellSize: cellSize)
         self.ignitionDuration = ignitionDuration
         self.burnDuration = burnDuration
@@ -58,10 +63,13 @@ final class FireSimulation {
 
     @discardableResult
     private func igniteCell(_ c: SIMD3<Int32>, now: TimeInterval) -> Bool {
-        guard runtime[c] == nil, !burnt.contains(c), runtime.count < maxActive else { return false }
-        runtime[c] = Runtime(state: .igniting,
-                             phaseEnd: now + ignitionDuration,
-                             nextSpread: .infinity)
+        guard runtime[c] == nil, !burnt.contains(c), runtime.count < maxActive
+        else { return false }
+        runtime[c] = Runtime(
+            state: .igniting,
+            phaseEnd: now + ignitionDuration,
+            nextSpread: .infinity
+        )
         return true
     }
 
@@ -82,7 +90,9 @@ final class FireSimulation {
                 if now >= rt.nextSpread {
                     var lit = 0
                     for n in grid.neighbors(of: coord) {
-                        if lit >= spreadFanout || runtime.count >= maxActive { break }
+                        if lit >= spreadFanout || runtime.count >= maxActive {
+                            break
+                        }
                         if igniteCell(n, now: now) { lit += 1 }
                     }
                     rt.nextSpread = now + spreadInterval
@@ -93,6 +103,7 @@ final class FireSimulation {
                 if rt.state == .burntOut {
                     runtime[coord] = nil
                     burnt.insert(coord)
+                    pendingBurnt.append(grid.center(of: coord))
                 } else {
                     runtime[coord] = rt
                 }
@@ -108,8 +119,16 @@ final class FireSimulation {
         runtime.keys.map { grid.center(of: $0) }
     }
 
+    /// World positions of cells that have burnt out since the last call.
+    /// Call once per tick and hand the result to a renderer.
+    func drainNewlyBurnt() -> [SIMD3<Float>] {
+        defer { pendingBurnt.removeAll() }
+        return pendingBurnt
+    }
+
     func reset() {
         runtime.removeAll()
         burnt.removeAll()
+        pendingBurnt.removeAll()
     }
 }
