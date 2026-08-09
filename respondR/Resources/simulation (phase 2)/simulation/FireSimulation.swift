@@ -5,6 +5,11 @@ enum CellState {
     case unburned, igniting, burning, burntOut
 }
 
+struct FireVisualSample {
+    let position: SIMD3<Float>
+    let scale: Float
+}
+
 /// Tick-based fire spread over a FireGrid. Pure logic — no RealityKit.
 ///
 /// Bounded by design: at most `maxActive` cells are igniting/burning at once,
@@ -21,6 +26,7 @@ final class FireSimulation {
 
     private struct Runtime {
         var state: CellState  // only .igniting or .burning live here
+        var phaseStart: TimeInterval
         var phaseEnd: TimeInterval
         var nextSpread: TimeInterval
     }
@@ -123,6 +129,7 @@ final class FireSimulation {
         else { return false }
         runtime[c] = Runtime(
             state: .igniting,
+            phaseStart: now,
             phaseEnd: now + ignitionDuration,
             nextSpread: .infinity
         )
@@ -137,6 +144,7 @@ final class FireSimulation {
             case .igniting:
                 if now >= rt.phaseEnd {
                     rt.state = .burning
+                    rt.phaseStart = now
                     rt.phaseEnd = now + burnDuration
                     rt.nextSpread = now + spreadInterval
                 }
@@ -170,9 +178,27 @@ final class FireSimulation {
         }
     }
 
-    /// World positions of cells currently igniting or burning.
-    func activePositions() -> [SIMD3<Float>] {
-        runtime.keys.map { grid.center(of: $0) }
+    /// Stable visual samples for cells currently igniting or burning.
+    func activeVisuals(now: TimeInterval) -> [FireVisualSample] {
+        runtime.keys.sorted { lhs, rhs in
+            if lhs.x != rhs.x { return lhs.x < rhs.x }
+            if lhs.y != rhs.y { return lhs.y < rhs.y }
+            return lhs.z < rhs.z
+        }.compactMap { coordinate in
+            guard let runtime = runtime[coordinate] else { return nil }
+            let scale: Float
+            switch runtime.state {
+            case .igniting:
+                scale = 1
+            case .burning:
+                let elapsed = max(0, now - runtime.phaseStart)
+                let progress = min(1, Float(elapsed / burnDuration))
+                scale = 1 + 3 * progress
+            case .unburned, .burntOut:
+                return nil
+            }
+            return FireVisualSample(position: grid.center(of: coordinate), scale: scale)
+        }
     }
 
     /// Removes fires covered by extinguisher spray without marking them burnt out.

@@ -20,18 +20,24 @@ final class FireRenderer {
         }
     }
 
-    func sync(active positions: [SIMD3<Float>]) {
+    func sync(active visuals: [FireVisualSample]) {
         for (i, entity) in pool.enumerated() {
-            if i < positions.count {
-                entity.position = positions[i]
+            if i < visuals.count {
+                let visual = visuals[i]
+                entity.position = visual.position
+                entity.scale = SIMD3<Float>(repeating: visual.scale)
                 entity.isEnabled = true
             } else {
                 entity.isEnabled = false
+                entity.scale = SIMD3<Float>(repeating: 1)
             }
         }
     }
 
     func clear() {
-        for entity in pool { entity.isEnabled = false }
+        for entity in pool {
+            entity.isEnabled = false
+            entity.scale = SIMD3<Float>(repeating: 1)
+        }
     }
 }

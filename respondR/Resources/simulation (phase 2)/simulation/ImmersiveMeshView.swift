@@ -85,12 +85,13 @@ struct ImmersiveMeshView: View {
                                 sim.extinguish(in: sprayCone)
                             }
                             sim.tick(now: now)
-                            active = sim.activePositions()
-                            renderer.sync(active: active)
+                            let visuals = sim.activeVisuals(now: now)
+                            active = visuals.map(\.position)
+                            renderer.sync(active: visuals)
                             chars.addCompletedBurns(sim.drainNewlyBurnt())
                         } else {
                             extinguisher.endSpray()
-                            active = sim.activePositions()
+                            active = sim.activeVisuals(now: now).map(\.position)
                         }
                         updateScenarioTick(
                             elapsed: elapsed,
