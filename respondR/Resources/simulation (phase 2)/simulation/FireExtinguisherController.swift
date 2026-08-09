@@ -114,10 +114,6 @@ final class FireExtinguisherController {
         }
     }
 
-    func resetAndSchedule(deviceTransform: @escaping DeviceTransformProvider) {
-        scheduleSpawn(deviceTransform: deviceTransform)
-    }
-
     /// Clears one attempt while retaining a successfully preloaded template for
     /// the next fire-start event.
     func resetForAwaitingFireStart() {

@@ -11,8 +11,12 @@ struct ImmersiveMeshView: View {
     @State private var charRenderer: CharRenderer?
     @State private var fireExtinguisher: FireExtinguisherController?
     @State private var tickTask: Task<Void, Never>?
-    @State private var hudEntity: Entity?
+    @State private var presentationTask: Task<Void, Never>?
+    @State private var statusEntity: Entity?
+    @State private var timerEntity: Entity?
     @State private var resultEntity: Entity?
+    @State private var headFollowSmoother = HeadFollowSmoother()
+    @State private var pickupPinchInProgress = false
 
     var body: some View {
         RealityView { content, attachments in
@@ -26,9 +30,13 @@ struct ImmersiveMeshView: View {
             appModel.exportHandler = { scanner.exportRoom() }
 
             if appModel.mode == .fire {
-                if let hud = attachments.entity(for: "fire-hud") {
-                    content.add(hud)
-                    hudEntity = hud
+                if let status = attachments.entity(for: "fire-status") {
+                    content.add(status)
+                    statusEntity = status
+                }
+                if let timer = attachments.entity(for: "fire-timer") {
+                    content.add(timer)
+                    timerEntity = timer
                 }
                 if let result = attachments.entity(for: "scenario-result") {
                     result.isEnabled = false
@@ -57,11 +65,7 @@ struct ImmersiveMeshView: View {
                     appModel.errorMessage = message
                 }
                 self.fireExtinguisher = extinguisher
-                if appModel.isScenarioActive {
-                    extinguisher.scheduleSpawn {
-                        scanner.queryHeadTransform()
-                    }
-                }
+                extinguisher.preloadAsset()
 
                 scanner.onGeometryUpdate = { positions in
                     sim.insertGeometry(positions)
@@ -75,7 +79,6 @@ struct ImmersiveMeshView: View {
                         lastTick = now
 
                         let headTransform = scanner.queryHeadTransform()
-                        extinguisher.update(deviceTransform: headTransform)
                         let active: [SIMD3<Float>]
                         if appModel.isScenarioActive {
                             if let sprayCone = extinguisher.activeSprayCone {
@@ -89,12 +92,10 @@ struct ImmersiveMeshView: View {
                             extinguisher.endSpray()
                             active = sim.activePositions()
                         }
-                        updateScenario(
+                        updateScenarioTick(
                             elapsed: elapsed,
                             activeFirePositions: active,
-                            headTransform: headTransform,
-                            hudEntity: hudEntity,
-                            resultEntity: resultEntity
+                            headTransform: headTransform
                         )
                         beat += 1
                         if beat % 20 == 0 {  // ~ every 2s
@@ -105,13 +106,49 @@ struct ImmersiveMeshView: View {
                         try? await Task.sleep(for: .milliseconds(100))
                     }
                 }
+
+                presentationTask = Task { @MainActor in
+                    var lastFrame = CACurrentMediaTime()
+                    while !Task.isCancelled {
+                        let now = CACurrentMediaTime()
+                        let elapsed = now - lastFrame
+                        lastFrame = now
+
+                        updatePresentationVisibility(
+                            statusEntity: statusEntity,
+                            timerEntity: timerEntity,
+                            resultEntity: resultEntity
+                        )
+                        if let headTransform = scanner.queryHeadTransform() {
+                            let stabilizedHead = headFollowSmoother.update(
+                                target: headTransform,
+                                deltaTime: elapsed
+                            )
+                            extinguisher.update(deviceTransform: stabilizedHead)
+                            updatePresentationTransforms(
+                                headTransform: stabilizedHead,
+                                statusEntity: statusEntity,
+                                timerEntity: timerEntity,
+                                resultEntity: resultEntity
+                            )
+                        } else {
+                            extinguisher.update(deviceTransform: nil)
+                        }
+
+                        try? await Task.sleep(for: .milliseconds(16))
+                    }
+                }
             }
 
             Task { await scanner.start() }
         } attachments: {
             if appModel.mode == .fire {
-                Attachment(id: "fire-hud") {
-                    HUDView()
+                Attachment(id: "fire-status") {
+                    HUDStatusView()
+                        .environment(appModel)
+                }
+                Attachment(id: "fire-timer") {
+                    HUDTimerView()
                         .environment(appModel)
                 }
                 Attachment(id: "scenario-result") {
@@ -132,17 +169,17 @@ struct ImmersiveMeshView: View {
             charRenderer?.clear()
             appModel.errorMessage = nil
             appModel.startScenarioForAvailableContent()
+            pickupPinchInProgress = false
+            headFollowSmoother.reset()
+            fireExtinguisher?.resetForAwaitingFireStart()
             if appModel.isScenarioActive {
-                fireExtinguisher?.resetAndSchedule {
-                    scanner?.queryHeadTransform()
-                }
-            } else {
-                fireExtinguisher?.cancel()
+                fireExtinguisher?.preloadAsset()
             }
         }
         .onChange(of: appModel.scenarioPhase) { _, phase in
             if phase != .active {
-                fireExtinguisher?.endSpray()
+                pickupPinchInProgress = false
+                fireExtinguisher?.resetForAwaitingFireStart()
             }
         }
         .gesture(
@@ -156,21 +193,37 @@ struct ImmersiveMeshView: View {
                         return
                     }
                     if fireExtinguisher?.contains(value.entity) == true {
-                        fireExtinguisher?.pickUp()
                         return
                     }
-                    let world = value.convert(
-                        value.location3D,
-                        from: .local,
-                        to: .scene
+                    guard appModel.fireStartPhase == .awaitingFireStart else { return }
+                    guard let headTransform = scanner?.queryHeadTransform() else {
+                        appModel.errorMessage =
+                            "Head tracking is unavailable. Look around, then pinch again."
+                        return
+                    }
+
+                    let headPosition = SIMD3<Float>(
+                        headTransform.columns.3.x,
+                        headTransform.columns.3.y,
+                        headTransform.columns.3.z
                     )
-                    let ignited = sim.ignite(
-                        at: world,
+                    let startedFires = sim.igniteRandomFires(
+                        around: headPosition,
+                        count: 5,
                         now: CACurrentMediaTime()
                     )
-                    print(
-                        "FireDebug: TAP captured at \(world) ignited=\(ignited)"
-                    )
+                    guard startedFires.count == 5 else {
+                        appModel.errorMessage =
+                            "Look around to scan more surfaces, then pinch again."
+                        return
+                    }
+                    guard appModel.recordFireStarted() else { return }
+
+                    appModel.errorMessage = nil
+                    appModel.statusMessage = "Five fires started."
+                    fireExtinguisher?.scheduleSpawn {
+                        scanner?.queryHeadTransform()
+                    }
                 }
         )
         .simultaneousGesture(
@@ -182,31 +235,29 @@ struct ImmersiveMeshView: View {
         .onDisappear {
             tickTask?.cancel()
             tickTask = nil
+            presentationTask?.cancel()
+            presentationTask = nil
             fireExtinguisher?.cancel()
             fireExtinguisher = nil
             scanner?.stop()
-            hudEntity = nil
+            statusEntity = nil
+            timerEntity = nil
             resultEntity = nil
+            pickupPinchInProgress = false
+            headFollowSmoother.reset()
             appModel.stopScenario()
             appModel.exportHandler = nil
             appModel.immersiveSpaceOpen = false
         }
     }
 
-    private func updateScenario(
+    private func updateScenarioTick(
         elapsed: TimeInterval,
         activeFirePositions: [SIMD3<Float>],
-        headTransform: simd_float4x4?,
-        hudEntity: Entity?,
-        resultEntity: Entity?
+        headTransform: simd_float4x4?
     ) {
-        hudEntity?.isEnabled = appModel.scenarioOutcome == nil
-        resultEntity?.isEnabled = appModel.scenarioOutcome != nil
-
         guard let headTransform else {
             appModel.updateScenario(deltaTime: elapsed, isNearActiveFire: false)
-            hudEntity?.isEnabled = appModel.scenarioOutcome == nil
-            resultEntity?.isEnabled = appModel.scenarioOutcome != nil
             return
         }
 
@@ -219,19 +270,39 @@ struct ImmersiveMeshView: View {
             simd_distance(headPosition, $0) < AppModel.fireProximityDistance
         }
         appModel.updateScenario(deltaTime: elapsed, isNearActiveFire: isNearFire)
+    }
 
-        var offset = matrix_identity_float4x4
-        offset.columns.3 = SIMD4<Float>(0, 0, -0.85, 1)
-        hudEntity?.transform = Transform(matrix: headTransform * offset)
-        resultEntity?.transform = Transform(matrix: headTransform * offset)
-        hudEntity?.isEnabled = appModel.scenarioOutcome == nil
-        resultEntity?.isEnabled = appModel.scenarioOutcome != nil
+    private func updatePresentationVisibility(
+        statusEntity: Entity?,
+        timerEntity: Entity?,
+        resultEntity: Entity?
+    ) {
+        let showsResult = appModel.scenarioOutcome != nil
+        statusEntity?.isEnabled = !showsResult
+        timerEntity?.isEnabled = !showsResult
+        resultEntity?.isEnabled = showsResult
+    }
+
+    private func updatePresentationTransforms(
+        headTransform: simd_float4x4,
+        statusEntity: Entity?,
+        timerEntity: Entity?,
+        resultEntity: Entity?
+    ) {
+        statusEntity?.transform = Transform(
+            matrix: headTransform * translation(x: -0.45, y: 0.25, z: -1.15)
+        )
+        timerEntity?.transform = Transform(
+            matrix: headTransform * translation(x: 0.45, y: 0.25, z: -1.15)
+        )
+        resultEntity?.transform = Transform(
+            matrix: headTransform * translation(x: 0, y: 0, z: -0.95)
+        )
     }
 
     private func handleSpatialEvents(_ events: SpatialEventCollection) {
         guard appModel.isScenarioActive, let fireExtinguisher else { return }
 
-        var hasActiveExtinguisherPinch = false
         var hasFinishedEvent = false
 
         for event in events {
@@ -241,7 +312,16 @@ struct ImmersiveMeshView: View {
                 case .directPinch, .indirectPinch:
                     if let target = event.targetedEntity,
                        fireExtinguisher.contains(target) {
-                        hasActiveExtinguisherPinch = true
+                        switch fireExtinguisher.phase {
+                        case .available:
+                            if fireExtinguisher.pickUp() {
+                                pickupPinchInProgress = true
+                            }
+                        case .equipped where !pickupPinchInProgress:
+                            _ = fireExtinguisher.beginSpray()
+                        case .waitingToSpawn, .equipped:
+                            break
+                        }
                     }
                 default:
                     break
@@ -253,10 +333,15 @@ struct ImmersiveMeshView: View {
             }
         }
 
-        if hasActiveExtinguisherPinch {
-            fireExtinguisher.beginSpray()
-        } else if hasFinishedEvent {
+        if hasFinishedEvent {
             fireExtinguisher.endSpray()
+            pickupPinchInProgress = false
         }
+    }
+
+    private func translation(x: Float, y: Float, z: Float) -> simd_float4x4 {
+        var matrix = matrix_identity_float4x4
+        matrix.columns.3 = SIMD4<Float>(x, y, z, 1)
+        return matrix
     }
 }

@@ -1,30 +1,18 @@
 import SwiftUI
 
-struct HUDView: View {
+struct HUDStatusView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack {
-            HStack {
-                VStack(alignment: .leading, spacing: 16) {
-                    healthPanel
-                    scenarioPanel
-                }
-                Spacer()
-            }
-
-            Spacer()
-
-            HStack(alignment: .bottom) {
-                if let guidance = appModel.extinguisherGuidance {
-                    instructionPanel(guidance)
-                }
-                Spacer()
-                timerPanel
+        VStack(alignment: .leading, spacing: 16) {
+            healthPanel
+            scenarioPanel
+            if let guidance = appModel.extinguisherGuidance {
+                instructionPanel(guidance)
             }
         }
-        .frame(width: 640, height: 360)
+        .frame(width: 280, alignment: .leading)
         .allowsHitTesting(false)
     }
 
@@ -78,25 +66,6 @@ struct HUDView: View {
         .accessibilityValue("\(appModel.healthPercentage) percent")
     }
 
-    private var timerPanel: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            Text("TIME REMAINING")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(appModel.formattedTimeRemaining)
-                .font(.title.monospacedDigit().weight(.semibold))
-                .foregroundStyle(appModel.timeRemaining <= 60 ? .red : .primary)
-                .contentTransition(.numericText(countsDown: true))
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
-        .glassBackgroundEffect()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Time remaining")
-        .accessibilityValue(appModel.formattedTimeRemaining)
-        .accessibilityAddTraits(.updatesFrequently)
-    }
-
     private var scenarioPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -134,7 +103,7 @@ struct HUDView: View {
         Text(guidance)
             .font(.callout.weight(.semibold))
             .multilineTextAlignment(.leading)
-            .frame(maxWidth: 320, alignment: .leading)
+            .frame(maxWidth: 248, alignment: .leading)
             .padding()
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
             .glassBackgroundEffect()
@@ -146,5 +115,29 @@ struct HUDView: View {
         if appModel.isNearFire { return .red }
         if appModel.health <= 0.25 { return .orange }
         return .green
+    }
+}
+
+struct HUDTimerView: View {
+    @Environment(AppModel.self) private var appModel
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Text("TIME REMAINING")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(appModel.formattedTimeRemaining)
+                .font(.title.monospacedDigit().weight(.semibold))
+                .foregroundStyle(appModel.timeRemaining <= 60 ? .red : .primary)
+                .contentTransition(.numericText(countsDown: true))
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .glassBackgroundEffect()
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Time remaining")
+        .accessibilityValue(appModel.formattedTimeRemaining)
+        .accessibilityAddTraits(.updatesFrequently)
     }
 }

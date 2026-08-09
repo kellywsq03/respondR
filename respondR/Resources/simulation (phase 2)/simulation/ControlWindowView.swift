@@ -139,7 +139,7 @@ struct ControlWindowView: View {
 #endif
 
 #if DEBUG
-                Text("Tap a surface to ignite.")
+                Text("Pinch a scanned surface once to start five fires.")
                     .font(.footnote).foregroundStyle(.secondary)
 #endif
             }
