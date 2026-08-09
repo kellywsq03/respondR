@@ -62,6 +62,58 @@ final class FireSimulation {
         return igniteCell(c, now: now)
     }
 
+    /// Selects and ignites a complete, separated set of mapless fires around
+    /// the learner. No cells are changed unless the full requested set exists.
+    @discardableResult
+    func igniteRandomFires(
+        around headPosition: SIMD3<Float>,
+        count: Int = 5,
+        now: TimeInterval
+    ) -> [SIMD3<Float>] {
+        guard count > 0, runtime.count + count <= maxActive else { return [] }
+
+        let candidates = grid.occupiedCells(
+            around: headPosition,
+            horizontalDistance: 1.5...4.0,
+            verticalOffset: -1.8 ... -0.35
+        ).filter { coordinate in
+            runtime[coordinate] == nil
+                && !burnt.contains(coordinate)
+                && !extinguished.contains(coordinate)
+        }.shuffled()
+
+        var selectedCoordinates: [SIMD3<Int32>] = []
+        var selectedPositions: [SIMD3<Float>] = []
+        selectedCoordinates.reserveCapacity(count)
+        selectedPositions.reserveCapacity(count)
+
+        for coordinate in candidates {
+            let position = grid.center(of: coordinate)
+            guard selectedPositions.allSatisfy({ simd_distance($0, position) >= 0.8 }) else {
+                continue
+            }
+
+            selectedCoordinates.append(coordinate)
+            selectedPositions.append(position)
+            if selectedCoordinates.count == count { break }
+        }
+
+        guard selectedCoordinates.count == count else { return [] }
+
+        var insertedCoordinates: [SIMD3<Int32>] = []
+        for coordinate in selectedCoordinates {
+            guard igniteCell(coordinate, now: now) else {
+                for inserted in insertedCoordinates {
+                    runtime[inserted] = nil
+                }
+                return []
+            }
+            insertedCoordinates.append(coordinate)
+        }
+
+        return selectedPositions
+    }
+
     @discardableResult
     private func igniteCell(_ c: SIMD3<Int32>, now: TimeInterval) -> Bool {
         guard runtime[c] == nil,

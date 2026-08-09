@@ -22,6 +22,12 @@ final class AppModel {
         case fire = "Fire"
         var id: String { rawValue }
     }
+
+    enum FireStartPhase: Equatable {
+        case awaitingFireStart
+        case started
+    }
+
     var mode: Mode = .wireframe
     /// Bumped to ask the immersive view to reset the complete scenario.
     var resetFireTrigger: Int = 0
@@ -29,6 +35,7 @@ final class AppModel {
     var endTrainingTrigger: Int = 0
     var extinguisherPhase: FireExtinguisherSession.Phase = .waitingToSpawn
     var isExtinguisherSpraying: Bool = false
+    private(set) var fireStartPhase: FireStartPhase = .awaitingFireStart
 
     private var scenarioSession = ScenarioSession()
     private(set) var health: Double = 1.0
@@ -42,6 +49,7 @@ final class AppModel {
     var totalCasualties: Int { scenarioSession.totalCasualties }
     var rescuedCasualties: Int { scenarioSession.rescuedCount }
     var remainingCasualties: Int { scenarioSession.remainingCasualties }
+    var hasStartedFire: Bool { fireStartPhase == .started }
 
     var healthPercentage: Int {
         Int((health * 100).rounded())
@@ -69,6 +77,8 @@ final class AppModel {
         switch scenarioPhase {
         case .preparing:
             "Scenario map required before spatial training can begin."
+        case .active where !hasStartedFire:
+            "Pinch a scanned surface to start five fires."
         case .active where remainingCasualties == 0:
             "All casualties rescued. Find the exit."
         case .active:
@@ -85,9 +95,11 @@ final class AppModel {
 
         return switch extinguisherPhase {
         case .waitingToSpawn:
-            nil
+            hasStartedFire
+                ? "Fire started. The extinguisher will arrive in five seconds."
+                : nil
         case .available:
-            "Tap the extinguisher to pick it up."
+            "Look at the extinguisher and pinch to pick it up."
         case .equipped:
             "Pinch and hold the extinguisher to spray. Aim the white cone at the fire."
         }
@@ -105,6 +117,7 @@ final class AppModel {
         health = 1.0
         timeNearFire = 0
         isNearFire = false
+        fireStartPhase = .awaitingFireStart
         scenarioSession.prepare()
     }
 
@@ -113,6 +126,7 @@ final class AppModel {
         health = 1.0
         timeNearFire = 0
         isNearFire = false
+        fireStartPhase = .awaitingFireStart
         do {
             try scenarioSession.start(requiredCasualtyIDs: requiredCasualtyIDs)
             errorMessage = nil
@@ -141,6 +155,7 @@ final class AppModel {
         scenarioSession.stop()
         timeNearFire = 0
         isNearFire = false
+        fireStartPhase = .awaitingFireStart
     }
 
     func requestScenarioReset() {
@@ -158,6 +173,13 @@ final class AppModel {
 
     func recordExitReached() {
         scenarioSession.reachExit()
+    }
+
+    @discardableResult
+    func recordFireStarted() -> Bool {
+        guard isScenarioActive, fireStartPhase == .awaitingFireStart else { return false }
+        fireStartPhase = .started
+        return true
     }
 
     /// Advances the fixed scenario countdown and fire exposure using actual

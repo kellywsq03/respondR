@@ -28,6 +28,22 @@ struct FireGrid {
         for p in positions { occupied.insert(coord(for: p)) }
     }
 
+    /// Occupied cells within a head-relative horizontal ring and vertical band.
+    func occupiedCells(
+        around origin: SIMD3<Float>,
+        horizontalDistance: ClosedRange<Float>,
+        verticalOffset: ClosedRange<Float>
+    ) -> [SIMD3<Int32>] {
+        occupied.filter { coordinate in
+            let position = center(of: coordinate)
+            let horizontal = simd_length(
+                SIMD2<Float>(position.x - origin.x, position.z - origin.z)
+            )
+            return horizontalDistance.contains(horizontal)
+                && verticalOffset.contains(position.y - origin.y)
+        }
+    }
+
     /// The occupied cells in the 26-cell neighborhood around `c`.
     func neighbors(of c: SIMD3<Int32>) -> [SIMD3<Int32>] {
         var result: [SIMD3<Int32>] = []
