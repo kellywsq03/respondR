@@ -111,14 +111,9 @@ struct ControlWindowView: View {
 #if DEBUG
                 GroupBox("Debug Event Preview") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("No anchor map or spatial casualty/exit entities are loaded.")
+                        Text("Gabe and fires use temporary scanned-surface placement. The exit and anchor map are not loaded.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-
-                        Button("Rescue Next Casualty") {
-                            appModel.debugRescueNextCasualty()
-                        }
-                        .disabled(!appModel.isScenarioActive || appModel.remainingCasualties == 0)
 
                         Button("Reach Exit") {
                             appModel.recordExitReached()

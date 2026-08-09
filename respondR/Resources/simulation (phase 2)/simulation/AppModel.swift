@@ -6,6 +6,7 @@ import ARKit
 @Observable
 @MainActor
 final class AppModel {
+    static let maplessCasualtyID = "mapless-gabe"
     static let fireProximityDistance: Float = 1
     static let fireExposureGracePeriod: TimeInterval = 3
     static let healthDrainRate: Double = 0.03
@@ -141,11 +142,8 @@ final class AppModel {
     func startScenarioForAvailableContent() {
         prepareScenario()
 #if DEBUG
-        _ = beginScenario(requiredCasualtyIDs: [
-            "debug-casualty-1",
-            "debug-casualty-2"
-        ])
-        statusMessage = "Debug event preview: no casualty, exit, fire, or map anchors are loaded."
+        _ = beginScenario(requiredCasualtyIDs: [Self.maplessCasualtyID])
+        statusMessage = "Debug mapless training: Gabe and fires use scanned surfaces; the exit and anchor map are not loaded."
 #else
         errorMessage = "The Phase 2 anchor map is not available yet. Spatial training cannot start."
 #endif
@@ -217,11 +215,6 @@ final class AppModel {
     }
 
 #if DEBUG
-    func debugRescueNextCasualty() {
-        guard let casualtyID = scenarioSession.nextUnrescuedCasualtyID else { return }
-        _ = scenarioSession.rescue(casualtyID: casualtyID)
-    }
-
     func debugExpireTimer() {
         scenarioSession.expireTime()
     }
