@@ -22,7 +22,10 @@ class SceneViewModel {
     private let fireSpreadIntervalNanoseconds: UInt64 = 700_000_000
     private let fireSpreadFanoutPerSource = 3
     private let maximumFireMarkersPerSource = 240
+    /// Adjust this value to tune how long a fire must touch an object before it burns away.
+    private let objectBurnDuration: TimeInterval = 4.0
     private var fireSpreadTask: Task<Void, Never>? = nil
+    private var objectIgnitionTimes: [UUID: Date] = [:]
 
     func placeItem(_ type: ItemType, at localPosition: SIMD3<Float>) -> PlacedItem {
         let id = UUID()
@@ -52,6 +55,7 @@ class SceneViewModel {
     func stopFireSpread() {
         fireSpreadTask?.cancel()
         fireSpreadTask = nil
+        objectIgnitionTimes.removeAll()
     }
 
     /// Expands each user-placed ignition front by a few neighboring cells. The
@@ -68,6 +72,8 @@ class SceneViewModel {
             stopFireSpread()
             return
         }
+
+        igniteAndBurnTouchedObjects(in: &grid, tabletop: tabletop)
 
         for source in sources {
             let sourceFires = placedItems.filter { $0.fireSourceID == source.id }
@@ -115,6 +121,47 @@ class SceneViewModel {
         floorGrid = grid
     }
 
+    /// Starts a burn timer as soon as a fire marker reaches a neighboring object
+    /// cell. The floor grid reserves objects as occupied cells, so fire cannot pass
+    /// through them until the timer removes the object and frees that cell.
+    private func igniteAndBurnTouchedObjects(in grid: inout FloorGrid, tabletop: Entity) {
+        let activeFires = placedItems.filter { $0.itemType.isFire && $0.fireSourceID != nil }
+        let nonFireIDs = Set(placedItems.filter { !$0.itemType.isFire }.map(\.id))
+        let now = Date()
+
+        for fire in activeFires {
+            guard let cell = grid.cellAt(local: fire.position) else { continue }
+            for rowDelta in -1...1 {
+                for colDelta in -1...1 where colDelta != 0 || rowDelta != 0 {
+                    let occupantID = grid.occupant(col: cell.col + colDelta, row: cell.row + rowDelta)
+                    if let occupantID, nonFireIDs.contains(occupantID), objectIgnitionTimes[occupantID] == nil {
+                        objectIgnitionTimes[occupantID] = now
+                    }
+                }
+            }
+        }
+
+        let burnedObjectIDs = objectIgnitionTimes.compactMap { id, ignitionTime in
+            now.timeIntervalSince(ignitionTime) >= objectBurnDuration ? id : nil
+        }
+        guard !burnedObjectIDs.isEmpty else { return }
+
+        let burnedSet = Set(burnedObjectIDs)
+        for item in placedItems where burnedSet.contains(item.id) {
+            if let cell = grid.cellAt(local: item.position) {
+                grid.free(col: cell.col, row: cell.row)
+            }
+            tabletop.findEntity(named: "placed_\(item.id.uuidString)")?.removeFromParent()
+        }
+        placedItems.removeAll { burnedSet.contains($0.id) }
+        if let selectedID = selectedPlacedItemID, burnedSet.contains(selectedID) {
+            selectedPlacedItemID = nil
+        }
+        for id in burnedSet {
+            objectIgnitionTimes.removeValue(forKey: id)
+        }
+    }
+
     func removeItem(id: UUID) {
         guard let item = placedItems.first(where: { $0.id == id }) else { return }
         // Removing an ignition point also removes the fire it originated. This keeps
@@ -133,6 +180,9 @@ class SceneViewModel {
             tabletopAnchor?.findEntity(named: "placed_\(removedItem.id.uuidString)")?.removeFromParent()
         }
         placedItems.removeAll { idsToRemove.contains($0.id) }
+        for removedID in idsToRemove {
+            objectIgnitionTimes.removeValue(forKey: removedID)
+        }
         if let selectedID = selectedPlacedItemID, idsToRemove.contains(selectedID) {
             selectedPlacedItemID = nil
         }
