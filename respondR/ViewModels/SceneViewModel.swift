@@ -25,6 +25,11 @@ class SceneViewModel {
     }
 
     func removeItem(id: UUID) {
+        // Free the grid cell the item was occupying so a new item can be placed there.
+        if let item = placedItems.first(where: { $0.id == id }),
+           let cell = floorGrid?.cellAt(local: item.position) {
+            floorGrid?.free(col: cell.col, row: cell.row)
+        }
         placedItems.removeAll { $0.id == id }
         if selectedPlacedItemID == id {
             selectedPlacedItemID = nil
