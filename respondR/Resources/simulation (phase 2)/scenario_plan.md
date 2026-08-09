@@ -13,12 +13,16 @@ Scenario duration: Fixed at 5 minutes
 - Fire is excluded from the victory condition.
 - One deliberate non-extinguisher scene pinch atomically starts exactly five separated random fires around the learner in Debug mapless mode. Later scene pinches cannot create more fires in that attempt.
 - Extinguisher asset preloading without scene installation, followed by a five-second spawn countdown that begins only after all five fires start successfully.
-- Gaze-and-pinch extinguisher pickup with a pickup latch, so the pickup pinch cannot also spray. A later targeted pinch-and-hold shows the white cone and plays the hiss until release or cancellation.
+- A single `gabe.usdz` casualty in Debug mapless training. His five-second countdown begins only after the extinguisher actually appears; he then waits for a valid scanned-floor point 6.5–7.5 metres from the learner rather than floating in head space.
+- One gaze-targeted pinch rescues Gabe exactly once, removes him from the world location immediately, and shows the same model at uniform scale `0.2` in the lower-left view to represent carrying him without an inventory screen.
+- Gaze-and-pinch extinguisher pickup with a collision-only target twice the normalized model bounds and a pickup latch, so the pickup pinch cannot also spray. A later targeted pinch-and-hold shows a brighter double-sided white cone from the hose nozzle and plays the hiss until release or cancellation.
+- Active fire visuals grow continuously from `1x` to approximately `4x` over the burning phase before natural burnout creates char. Manual extinguishing still removes fire immediately without char.
 - Split peripheral HUD attachments: health, challenge progress, and concise guidance in the upper-left; fixed countdown in the upper-right; no centre-spanning HUD canvas.
 - An approximately 60 Hz stabilized presentation loop for the head-following HUD and lower-right equipped extinguisher, independent from the bounded 10 Hz fire simulation.
 - Interactive spatial victory/defeat debrief with completion time, casualty result, Try Again, End Training, and the exact instruction `Press the Digital Crown to exit.`
-- Complete reset/end event paths for timer, health exposure, outcome, one-shot fire start, fire/char rendering, delayed extinguisher spawn, pickup latch, spray cone, and hiss.
-- Debug-only event controls for Rescue Next Casualty, Reach Exit, Expire Timer, and Deplete Health.
+- The main volumetric window is dismissed only after the immersive space opens and is reopened when immersion ends, preventing an otherwise empty floating volume from remaining beside Phase 2.
+- Complete reset/end event paths for timer, health exposure, outcome, one-shot fire start, fire/char rendering, delayed extinguisher and Gabe spawns, world/carried Gabe, pickup latch, spray cone, and hiss.
+- Debug-only event controls for Reach Exit, Expire Timer, and Deplete Health. Casualty progress must use the spatial Gabe interaction.
 - Release behavior that remains in Preparing and reports the missing anchor map instead of inventing spatial content.
 
 Primary implementation files:
@@ -33,28 +37,28 @@ Primary implementation files:
 
 ### Debug behavior while the map is unavailable
 
-Debug builds register two non-spatial casualty IDs so the mission state, HUD, all outcome paths, debrief, and reset behavior can be exercised from the control window. After scene reconstruction has supplied enough eligible cells, the first scene pinch also creates five mapless random fires 1.5–4.0 metres around the learner for extinguisher training. This does not spawn a casualty, exit, authored furniture-bound fire, anchor, or route.
+Debug builds register the single casualty ID `mapless-gabe`. After scene reconstruction has supplied enough eligible cells, the first scene pinch creates five mapless random fires 1.5–4.0 metres around the learner. The extinguisher appears five seconds later; another five seconds after its actual appearance, Gabe spawns at authored scale on a suitable scanned floor 6.5–7.5 metres away. This does not create a temporary exit, authored furniture-bound fire, anchor, or route and is never a Release fallback.
 
 ### Unable to implement until the anchor map is supplied
 
 - Importing and validating the real anchor map and its training-zone alignment reference.
 - Replacing the Debug mapless random fire source with the five authored furniture-bound fire identifiers and real transforms.
 - Making authored blocking fires persist at those real locations until extinguished.
-- Binding real casualty identifiers to casualty assets and transforms.
-- Tapping a real casualty, removing its entity, and playing spatial rescue feedback.
+- Replacing Debug scanned-floor Gabe placement with the real map casualty transform and alignment validation.
+- Binding the real Gabe casualty identifier to his authored map transform.
 - Binding the single exit-door identifier to its real transform and proximity dwell zone.
 - Validating the one-shot fire-start event against the map adapter instead of the current Debug random placement source.
 - Validating occlusion, reachability, alignment, collision, route safety, and exit accuracy.
 - Completing the required physical Vision Pro end-to-end scenario run.
 
-None of these blocked spatial features has been approximated with a temporary or head-relative placement.
+The Debug-only Gabe and random fires deliberately exercise interaction and lifecycle behavior without pretending to validate the authored route. Release still receives no head-relative or random fallback, and no temporary exit exists.
 
 ### Current local verification
 
 - Strict Debug and Release visionOS Simulator builds pass with Swift warnings treated as errors.
 - A strict generic visionOS device build passes with code signing disabled for local compilation.
 - Xcode static analysis passes for the Debug visionOS Simulator target.
-- `Info.plist`, whitespace, exact Digital Crown copy, call-site, and bundle-resource checks pass. The Release app contains `Fire_Extinguisher.usdz` and this plan.
+- `Info.plist`, whitespace, exact Digital Crown copy, call-site, and bundle-resource checks pass. The Release app contains `Fire_Extinguisher.usdz`, `gabe.usdz`, and this plan.
 - Release binary inspection confirms that the Debug event-control labels are absent.
 
 The interactive mission flow has not been marked as physically validated. Scene reconstruction is unavailable in the simulator, and the final spatial route cannot be run until the anchor map is supplied and the app is exercised on a physical Apple Vision Pro.
@@ -68,7 +72,7 @@ The scenario should remain simple to understand:
 1. Pinch a scanned surface once to start the fire event.
 2. Look at the extinguisher when it appears and pinch to equip it.
 3. Extinguish fires that prevent safe progress.
-4. Pick up every casualty.
+4. Look at Gabe and pinch once to rescue and carry him.
 5. Find and reach the exit before time runs out.
 
 Extinguishing every fire is not a victory requirement. Fire is an environmental hazard and route obstacle, not a checklist objective.
@@ -79,10 +83,10 @@ Extinguishing every fire is not a victory requirement. Fire is an environmental 
 - Victory requires every casualty to be rescued and the learner to reach the exit while time remains.
 - Defeat occurs when time expires, health reaches zero, or the learner reaches the exit without rescuing every casualty.
 - Fires do not appear as a completion counter and do not need to be fully extinguished.
-- Casualties are rescued by tapping them once.
-- Picking up a casualty records the rescue and removes the casualty from danger. There is no casualty inventory screen or persistent carried-body model in this scope.
-- No temporary casualty positions or temporary exit positions will be added to the production immersive scene.
-- Debug-only controls may trigger mission events before the anchor map arrives. These controls do not contain spatial positions and are excluded from release builds.
+- Casualties are rescued with one gaze-targeted pinch.
+- Picking up Gabe records the rescue, removes him from danger immediately, and displays him at 20% scale in the lower-left view to show he is being carried. There is no casualty inventory screen.
+- Debug mapless training may place the single Gabe casualty on a scanned floor 6.5–7.5 metres away. No temporary casualty or exit positions are added to Release.
+- Debug-only controls may trigger exit, timeout, and health events before the anchor map arrives. They are excluded from release builds; casualty rescue is exercised through Gabe himself.
 - No automated test suite is required for this scenario. Build validation and physical Vision Pro end-to-end checks are still required.
 - The anchor map and all anchor-bound placement work remain on hold until the real map is supplied.
 
@@ -101,9 +105,13 @@ Mission rules, HUD progress, timer behavior, result screens, and reset behavior 
 
 When the anchor map arrives, a small anchor adapter will translate real anchored interactions into these events. The mission state does not need to know where an entity is placed.
 
-### Rejected: temporary spatial casualties and exit
+### Selected for Debug only: scanned-floor Gabe
 
-Temporary scene positions would provide limited value because they would not validate the real map, alignment, route, reachability, or physical comfort. They would also introduce scene code that must be removed or carefully separated later.
+The single Debug Gabe validates asset loading, gaze targeting, idempotent rescue, disappearance, carried presentation, and reset cleanup. His scanned-floor placement does not validate the real map, alignment, route, or exit and is never used in Release.
+
+### Rejected: temporary Release spatial fallbacks and exit
+
+Random or head-relative production placements would hide missing map/alignment failures and could create unsafe or misleading training geometry. Release therefore remains blocked, and no temporary exit is created.
 
 ### Rejected: waiting for the map before building any scenario functionality
 
@@ -117,7 +125,7 @@ This would unnecessarily delay the timer, objective HUD, result screens, mission
 - Pattern: Live mission HUD followed by a deterministic debrief screen.
 - Primary action: Move through the scenario and rescue casualties.
 - Supporting action: Extinguish fires that obstruct safe progress.
-- Core path: Enter Phase 2 → start five fires once → wait five seconds → gaze-and-pinch extinguisher → manage hazards → rescue casualties → reach exit → receive debrief.
+- Core path: Enter Phase 2 → start five fires once → wait five seconds → gaze-and-pinch extinguisher → wait five seconds for Gabe → manage hazards → rescue and carry Gabe → reach exit → receive debrief.
 - Recovery path: Defeat screen → Try Again → complete scenario reset → restart at `05:00`.
 - Required states: Preparing, active, victory, defeat, map error, reset in progress.
 - Handoff constraint: The anchor map supplies spatial transforms only; it must not own timer, objective, or outcome rules.
@@ -127,13 +135,13 @@ This would unnecessarily delay the timer, objective HUD, result screens, mission
 The final anchor map must provide stable identifiers and transforms for:
 
 - Five authored fire locations.
-- Every casualty included in the scenario, with at least one casualty required.
+- Exactly one required casualty location for Gabe.
 - Exactly one exit-door location.
 - The authored training-zone alignment reference used to place these entities correctly.
 
-Scenario start must be blocked if the map is missing, alignment is invalid, there are no casualties, any required casualty identifier is duplicated, or the exit is missing or duplicated. The app must show a clear error instead of silently placing missing content near the learner.
+Scenario start must be blocked if the map is missing, alignment is invalid, Gabe is missing or duplicated, or the exit is missing or duplicated. The app must show a clear error instead of silently placing missing content near the learner.
 
-The casualty count is not hardcoded in the mission logic. At scenario start, every valid casualty identifier supplied by the anchor map becomes a required rescue objective.
+The mission state still registers its objective by stable identifier, but this authored scenario supplies exactly one required casualty: Gabe.
 
 ## 6. Scenario states
 
@@ -150,7 +158,8 @@ The casualty count is not hardcoded in the mission logic. At scenario start, eve
 - Health and fire-proximity damage operate normally.
 - The first valid fire-start pinch creates five fires once and starts the extinguisher's five-second spawn delay.
 - An active pinch targeted at the available extinguisher equips it immediately. The pickup pinch cannot spray; a later targeted pinch-and-hold controls the cone and hiss.
-- Casualties can be rescued once each.
+- In Debug, the extinguisher's actual appearance starts Gabe's five-second delay. Gabe then appears only after a valid scanned-floor point is available 6.5–7.5 metres away.
+- One gaze-targeted pinch rescues Gabe once, removes him from his floor position immediately, and moves the 20%-scale carried presentation to the lower-left view.
 - Exit proximity can resolve the attempt.
 
 ### Victory
@@ -167,7 +176,7 @@ The casualty count is not hardcoded in the mission logic. At scenario start, eve
 
 ### Resetting
 
-- Existing fires, char, casualty state, exit state, outcome state, health exposure, timer state, extinguisher state, spray cone, and hiss are cleared.
+- Existing fires, char, pending/world/carried casualty state, exit state, outcome state, health exposure, timer state, extinguisher state, spray cone, and hiss are cleared.
 - The same validated anchor map is reused if it is still available and aligned.
 - The scenario returns to Active with full health, all casualties restored, and the timer reset to `05:00`.
 - Fire start returns to `awaitingFireStart`; no extinguisher countdown exists until a new successful five-fire start pinch.
@@ -189,6 +198,7 @@ The casualty count is not hardcoded in the mission logic. At scenario start, eve
 - The first valid non-extinguisher scene pinch selects exactly five occupied grid cells 1.5–4.0 metres from the learner, 1.8–0.35 metres below head height, and at least 0.8 metres apart.
 - Placement is atomic. If five eligible cells are unavailable, no fire starts, no extinguisher countdown begins, and the learner is prompted to scan more surfaces.
 - After successful placement, later scene pinches are ignored by the fire-start system until reset.
+- Igniting fire begins at `1x`. During the natural burning phase its visual scale grows linearly to approximately `4x` before burnout.
 - This random source is Debug mapless training only and must never become a Release fallback for a missing or invalid anchor map.
 
 ### Final anchor-map behavior
@@ -210,15 +220,15 @@ Each casualty has a stable identifier and one of two states:
 
 Interaction rules:
 
-- The learner taps the casualty to pick them up.
-- The first valid tap changes the casualty to Rescued.
-- Repeated taps cannot increment progress more than once.
-- The casualty is removed from its hazard position after rescue.
-- A brief confirmation sound and visual acknowledgement are shown.
+- The learner looks at the casualty and pinches once to pick them up.
+- The first valid targeted pinch changes the casualty to Rescued.
+- Repeated pinches cannot increment progress more than once.
+- The casualty is removed from the hazard position immediately after rescue.
+- A 20%-scale carried representation appears in the lower-left view and follows the stabilized head pose.
 - The objective HUD updates immediately.
 - The extinguisher remains equipped; casualty rescue does not introduce an inventory or equipment conflict.
 
-The rescue interaction is connected to the real casualty entity only after the anchor map arrives. Before then, debug-only controls may call the same rescue event using known casualty identifiers without spawning a fake spatial casualty.
+Before the anchor map arrives, Debug uses `gabe.usdz` at authored world scale on a suitable scanned-floor point 6.5–7.5 metres away. Its fixed five-second delay begins after the extinguisher actually spawns. This placement validates the rescue interaction but not map alignment, route safety, or the final authored casualty location. Release remains blocked until those real spatial inputs exist.
 
 ## 10. Exit behavior
 
@@ -304,15 +314,14 @@ Both outcomes also show:
 
 The existing control window may expose the following actions only in Debug builds:
 
-- `Rescue Next Casualty`
 - `Reach Exit`
 - `Expire Timer`
 - `Deplete Health`
 - `Reset Scenario`
 
-These controls exercise production mission events and result screens. They do not create RealityKit entities, transforms, anchor fallbacks, or release-visible UI.
+These controls exercise production outcome and reset events and are not release-visible. Casualty rescue is intentionally absent from the controls so the mission state cannot diverge from spatial Gabe.
 
-This allows the five-minute timer, objective progress, victory, each defeat reason, debrief, and reset behavior to be reviewed before spatial integration without creating throwaway placement code.
+This allows the five-minute timer, victory, each defeat reason, debrief, and reset behavior to be reviewed before exit integration. Spatial Gabe exercises objective progress and rescue cleanup directly.
 
 ## 14. Work that can proceed before the anchor map
 
@@ -321,15 +330,18 @@ This allows the five-minute timer, objective progress, victory, each defeat reas
 3. Exit outcome evaluation, health defeat, and timer defeat. Implemented.
 4. One-shot atomic five-fire Debug placement. Implemented.
 5. Post-fire extinguisher delay, gaze pickup latch, cone, hiss, and cleanup. Implemented.
-6. Peripheral stabilized HUD and victory/defeat debrief. Implemented.
-7. Try Again, End Training, Digital Crown guidance, and Debug event controls. Implemented.
-8. Strict local build, analysis, and bundle validation. Required before handoff.
+6. Delayed scanned-floor Gabe spawn, gaze rescue, 20%-scale carried presentation, and cleanup. Implemented for Debug mapless training.
+7. `1x`-to-`4x` active fire growth before natural burnout. Implemented.
+8. Peripheral stabilized HUD and victory/defeat debrief. Implemented.
+9. Main-window dismissal during immersion and reopen on exit. Implemented.
+10. Try Again, End Training, Digital Crown guidance, and Debug event controls. Implemented.
+11. Strict local build, analysis, and bundle validation. Required before handoff.
 
 ## 15. Work held until the anchor map arrives
 
 1. Import and validate the real map and its alignment reference.
 2. Bind the five fire identifiers to their authored transforms.
-3. Bind every casualty identifier to its real transform and casualty entity.
+3. Replace Debug scanned-floor Gabe placement with every real casualty identifier and authored transform.
 4. Bind the single exit identifier to its real door transform and proximity zone.
 5. Replace the Debug random fire source with map-authored furniture fire startup while retaining the one-shot event and post-start extinguisher delay.
 6. Validate occlusion, reachability, collision, comfort, and route safety on physical Vision Pro hardware.
@@ -344,17 +356,20 @@ No automated scenario tests are required. The completed scenario must pass the f
 - The extinguisher is absent before fire start.
 - One scene pinch creates exactly five separated fires; later scene pinches create none.
 - The extinguisher appears five seconds after successful fire placement, never five seconds after immersive entry.
-- Gaze-and-pinch equips immediately, and that pickup pinch never sprays.
-- A later targeted pinch-and-hold shows the white cone and hiss; release or cancellation removes both immediately.
+- Gabe's countdown starts only when the extinguisher actually appears. Gabe appears about five seconds later if a suitable scanned floor is available 6.5–7.5 metres away; otherwise the app waits and asks the learner to scan more floor rather than floating him.
+- Gaze-and-pinch equips immediately through the doubled pickup target, and that pickup pinch never sprays.
+- A later targeted pinch-and-hold shows the brighter white cone directly from the hose nozzle and plays the hiss; release or cancellation removes both immediately.
+- One gaze-targeted pinch on Gabe records the single rescue, removes the world placement immediately, and shows him at 20% scale in the lower-left view without opening an inventory.
+- Repeated Gabe pinches cannot double-count the rescue.
+- Active fire visuals grow from 1x to approximately 4x before natural burnout and char.
 - The held extinguisher stays lower-right, the status HUD stays upper-left, the timer stays upper-right, and all follow head movement smoothly.
-- Rescue events update progress once per casualty identifier.
-- Repeating the same rescue event does not double-count.
+- The main volumetric window disappears after immersive entry, no blank volume remains, and the main window reopens when immersion ends.
 - Reaching the exit with all casualties rescued and time remaining shows Victory.
 - Reaching the exit with any casualty remaining shows Defeat.
 - Timer expiry shows Defeat once and freezes the scenario.
 - Zero health shows Defeat once and freezes the scenario.
 - Fire state is never used as a victory requirement.
-- Try Again restores health, timer, casualties, and Active state; it clears fires and the extinguisher, then requires a new successful start pinch before beginning another five-second spawn delay.
+- Try Again restores health, timer, and casualty progress; it clears fires, world/carried Gabe, and the extinguisher, then requires a new successful start pinch before beginning another extinguisher delay and subsequent Gabe delay.
 - End Training stops the timer, fire updates, spray visual, and hiss.
 - Victory and defeat both show `Press the Digital Crown to exit.`
 
@@ -362,7 +377,7 @@ No automated scenario tests are required. The completed scenario must pass the f
 
 - The map aligns correctly with the real training zone before the scenario can start.
 - All five fires appear at the authored locations.
-- Every casualty appears at its authored location and can be tapped reliably.
+- Every casualty appears at its authored location and can be gaze-targeted and pinched reliably.
 - Each rescued casualty disappears from danger and updates the HUD once.
 - The exit triggers only at the real door and does not trigger from nearby unrelated positions.
 - The learner can complete the intended route without unsafe real-world movement.
@@ -377,9 +392,9 @@ No automated scenario tests are required. The completed scenario must pass the f
 
 The scenario is complete when:
 
-- A validated anchor map supplies five fires, at least one casualty, and exactly one exit.
+- A validated anchor map supplies five fires, exactly one Gabe casualty, and exactly one exit.
 - The learner receives clear mission instructions and a fixed five-minute countdown.
-- Every casualty can be rescued exactly once by tapping.
+- Every casualty can be rescued exactly once with a gaze-targeted pinch.
 - The learner can use the existing extinguisher to clear necessary fires.
 - Victory occurs only after all casualties are rescued and the exit is reached with time remaining.
 - Defeat occurs on timeout, zero health, or reaching the exit with casualties left behind.
@@ -398,7 +413,6 @@ The scenario is complete when:
 - A fire objective counter or fire score.
 - Temporary production casualty or exit positions.
 - Casualty inventory management.
-- A persistent carried-casualty body model.
 - Multiple exits or exit selection.
 - Scoring, grades, leaderboards, or performance analytics beyond the result summary.
 - Automated scenario tests.
