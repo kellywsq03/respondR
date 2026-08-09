@@ -115,13 +115,6 @@ private struct PaletteCell: View {
                 .font(.caption2)
                 .foregroundStyle(isSelected ? .primary : .secondary)
                 .lineLimit(1)
-
-            if let material = item.combustionMaterial {
-                Text(material.rawValue)
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(material == .fireproof ? .green : .secondary)
-                    .lineLimit(1)
-            }
         }
         .padding(6)
         .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
