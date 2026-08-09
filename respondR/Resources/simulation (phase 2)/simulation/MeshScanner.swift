@@ -125,19 +125,32 @@ final class MeshScanner {
         verticalOffset: ClosedRange<Float>
     ) -> SIMD3<Float>? {
         var eligible: [SIMD3<Float>] = []
+        let radius = horizontalDistance.upperBound
+        let minimum = Self.bucketCoordinate(
+            for: headPosition + SIMD3<Float>(-radius, verticalOffset.lowerBound, -radius)
+        )
+        let maximum = Self.bucketCoordinate(
+            for: headPosition + SIMD3<Float>(radius, verticalOffset.upperBound, radius)
+        )
 
         for buckets in surfaceBuckets.values {
             var seen: Set<Int> = []
-            for triangles in buckets.values {
-                for triangle in triangles where seen.insert(triangle.id).inserted {
-                    guard abs(triangle.normal.y) >= 0.75 else { continue }
-                    let delta = triangle.center - headPosition
-                    let distance = simd_length(SIMD2<Float>(delta.x, delta.z))
-                    guard horizontalDistance.contains(distance),
-                          verticalOffset.contains(delta.y) else {
-                        continue
+            for x in minimum.x...maximum.x {
+                for y in minimum.y...maximum.y {
+                    for z in minimum.z...maximum.z {
+                        let key = SIMD3<Int32>(x, y, z)
+                        for triangle in buckets[key] ?? []
+                        where seen.insert(triangle.id).inserted {
+                            guard abs(triangle.normal.y) >= 0.75 else { continue }
+                            let delta = triangle.center - headPosition
+                            let distance = simd_length(SIMD2<Float>(delta.x, delta.z))
+                            guard horizontalDistance.contains(distance),
+                                  verticalOffset.contains(delta.y) else {
+                                continue
+                            }
+                            eligible.append(triangle.center)
+                        }
                     }
-                    eligible.append(triangle.center)
                 }
             }
         }

@@ -83,6 +83,13 @@ struct HUDStatusView: View {
             Text(appModel.missionGuidance)
                 .font(.callout.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
+
+            if let statusMessage = appModel.statusMessage {
+                Text(statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
         }
         .frame(width: 248, alignment: .leading)
         .padding()
