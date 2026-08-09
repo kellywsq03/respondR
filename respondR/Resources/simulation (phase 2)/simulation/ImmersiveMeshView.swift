@@ -5,11 +5,14 @@ import simd
 
 struct ImmersiveMeshView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @State private var scanner: MeshScanner?
     @State private var fireSim: FireSimulation?
     @State private var fireRenderer: FireRenderer?
     @State private var charRenderer: CharRenderer?
     @State private var fireExtinguisher: FireExtinguisherController?
+    @State private var casualtyController: CasualtyController?
     @State private var tickTask: Task<Void, Never>?
     @State private var presentationTask: Task<Void, Never>?
     @State private var statusEntity: Entity?
@@ -56,6 +59,23 @@ struct ImmersiveMeshView: View {
                 self.fireRenderer = renderer
                 self.charRenderer = chars
 
+                let casualty = CasualtyController(sceneRoot: root)
+                casualty.onError = { message in
+                    appModel.errorMessage = message
+                }
+                casualty.onWaitingForFloor = {
+                    guard appModel.isScenarioActive else { return }
+                    appModel.statusMessage =
+                        "Look around to scan more floor so casualty Gabe can appear."
+                }
+                casualty.onDidSpawn = {
+                    guard appModel.isScenarioActive else { return }
+                    appModel.statusMessage =
+                        "Casualty Gabe appeared. Look at him and pinch once to rescue him."
+                }
+                self.casualtyController = casualty
+                casualty.preloadAsset()
+
                 let extinguisher = FireExtinguisherController(sceneRoot: root)
                 extinguisher.onStateChange = { phase, isSpraying in
                     appModel.extinguisherPhase = phase
@@ -63,6 +83,19 @@ struct ImmersiveMeshView: View {
                 }
                 extinguisher.onError = { message in
                     appModel.errorMessage = message
+                }
+                extinguisher.onDidSpawn = {
+                    guard appModel.isScenarioActive else { return }
+                    casualty.scheduleSpawn(
+                        deviceTransform: { scanner.queryHeadTransform() },
+                        floorPosition: { headPosition in
+                            scanner.randomFloorPosition(
+                                around: headPosition,
+                                horizontalDistance: 6.5...7.5,
+                                verticalOffset: -2.3 ... -0.5
+                            )
+                        }
+                    )
                 }
                 self.fireExtinguisher = extinguisher
                 extinguisher.preloadAsset()
@@ -126,6 +159,7 @@ struct ImmersiveMeshView: View {
                                 deltaTime: elapsed
                             )
                             extinguisher.update(deviceTransform: stabilizedHead)
+                            casualty.update(deviceTransform: stabilizedHead)
                             updatePresentationTransforms(
                                 headTransform: stabilizedHead,
                                 statusEntity: statusEntity,
@@ -134,6 +168,7 @@ struct ImmersiveMeshView: View {
                             )
                         } else {
                             extinguisher.update(deviceTransform: nil)
+                            casualty.update(deviceTransform: nil)
                         }
 
                         try? await Task.sleep(for: .milliseconds(16))
@@ -173,14 +208,22 @@ struct ImmersiveMeshView: View {
             pickupPinchInProgress = false
             headFollowSmoother.reset()
             fireExtinguisher?.resetForAwaitingFireStart()
+            casualtyController?.resetForAwaitingSpawn()
             if appModel.isScenarioActive {
                 fireExtinguisher?.preloadAsset()
+                casualtyController?.preloadAsset()
             }
         }
         .onChange(of: appModel.scenarioPhase) { _, phase in
             if phase != .active {
                 pickupPinchInProgress = false
                 fireExtinguisher?.resetForAwaitingFireStart()
+                casualtyController?.resetForAwaitingSpawn()
+            }
+        }
+        .onChange(of: appModel.endTrainingTrigger) { _, _ in
+            Task {
+                await dismissImmersiveSpace()
             }
         }
         .gesture(
@@ -193,7 +236,8 @@ struct ImmersiveMeshView: View {
                     else {
                         return
                     }
-                    if fireExtinguisher?.contains(value.entity) == true {
+                    if casualtyController?.contains(value.entity) == true
+                        || fireExtinguisher?.contains(value.entity) == true {
                         return
                     }
                     guard appModel.fireStartPhase == .awaitingFireStart else { return }
@@ -240,6 +284,8 @@ struct ImmersiveMeshView: View {
             presentationTask = nil
             fireExtinguisher?.cancel()
             fireExtinguisher = nil
+            casualtyController?.cancel()
+            casualtyController = nil
             scanner?.stop()
             statusEntity = nil
             timerEntity = nil
@@ -249,6 +295,7 @@ struct ImmersiveMeshView: View {
             appModel.stopScenario()
             appModel.exportHandler = nil
             appModel.immersiveSpaceOpen = false
+            openWindow(id: AppSceneID.mainWindow)
         }
     }
 
@@ -302,7 +349,7 @@ struct ImmersiveMeshView: View {
     }
 
     private func handleSpatialEvents(_ events: SpatialEventCollection) {
-        guard appModel.isScenarioActive, let fireExtinguisher else { return }
+        guard appModel.isScenarioActive else { return }
 
         var hasFinishedEvent = false
 
@@ -311,7 +358,20 @@ struct ImmersiveMeshView: View {
             case .active:
                 switch event.kind {
                 case .directPinch, .indirectPinch:
-                    if let target = event.targetedEntity,
+                    guard let target = event.targetedEntity else { continue }
+
+                    if let casualtyController,
+                       casualtyController.contains(target) {
+                        if appModel.recordCasualtyRescue(
+                            casualtyID: AppModel.maplessCasualtyID
+                        ), casualtyController.completeRescue() {
+                            appModel.statusMessage =
+                                "Gabe rescued. Carry him to the exit."
+                        }
+                        continue
+                    }
+
+                    if let fireExtinguisher,
                        fireExtinguisher.contains(target) {
                         switch fireExtinguisher.phase {
                         case .available:
@@ -335,7 +395,7 @@ struct ImmersiveMeshView: View {
         }
 
         if hasFinishedEvent {
-            fireExtinguisher.endSpray()
+            fireExtinguisher?.endSpray()
             pickupPinchInProgress = false
         }
     }

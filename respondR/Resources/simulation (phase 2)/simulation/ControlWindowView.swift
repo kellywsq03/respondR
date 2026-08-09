@@ -5,6 +5,7 @@ struct ControlWindowView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    @Environment(\.dismissWindow) private var dismissWindow
     @State private var isReturningToPhaseSelection = false
 
     var body: some View {
@@ -56,6 +57,7 @@ struct ControlWindowView: View {
                         case .opened:
                             appModel.immersiveSpaceOpen = true
                             appModel.errorMessage = nil
+                            dismissWindow(id: AppSceneID.mainWindow)
                         case .userCancelled:
                             appModel.immersiveSpaceOpen = false
                             appModel.errorMessage = "Open was cancelled."

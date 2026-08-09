@@ -17,7 +17,7 @@ struct respondRApp: App {
     }
 
     var body: some SwiftUI.Scene {
-        WindowGroup {
+        WindowGroup(id: AppSceneID.mainWindow) {
             ContentView()
                 .environment(appModel)
         }
