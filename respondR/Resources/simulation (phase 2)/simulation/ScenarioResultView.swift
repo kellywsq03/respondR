@@ -68,6 +68,12 @@ struct ScenarioResultView: View {
                 }
                 .buttonStyle(.borderedProminent)
             }
+
+            Text("Press the Digital Crown to exit.")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .accessibilityLabel("Press the Digital Crown to exit this screen")
         }
         .frame(width: 480)
         .padding(32)

@@ -2,7 +2,7 @@
 
 Scenario duration: Fixed at 5 minutes
 
-## 0. Implementation status — 8 August 2026
+## 0. Implementation status — 9 August 2026
 
 ### Implemented now without the anchor map
 
@@ -11,9 +11,13 @@ Scenario duration: Fixed at 5 minutes
 - Victory when every registered casualty is rescued and the exit event occurs with time remaining.
 - Defeat on timeout, zero health, or an exit event with casualties left behind.
 - Fire is excluded from the victory condition.
-- Head-following casualty objective guidance in the existing HUD.
-- Interactive spatial victory/defeat debrief with completion time, casualty result, Try Again, and End Training.
-- Complete reset/end event paths for timer, health exposure, outcome, fire/char rendering, extinguisher spawn, spray cone, and hiss.
+- One deliberate non-extinguisher scene pinch atomically starts exactly five separated random fires around the learner in Debug mapless mode. Later scene pinches cannot create more fires in that attempt.
+- Extinguisher asset preloading without scene installation, followed by a five-second spawn countdown that begins only after all five fires start successfully.
+- Gaze-and-pinch extinguisher pickup with a pickup latch, so the pickup pinch cannot also spray. A later targeted pinch-and-hold shows the white cone and plays the hiss until release or cancellation.
+- Split peripheral HUD attachments: health, challenge progress, and concise guidance in the upper-left; fixed countdown in the upper-right; no centre-spanning HUD canvas.
+- An approximately 60 Hz stabilized presentation loop for the head-following HUD and lower-right equipped extinguisher, independent from the bounded 10 Hz fire simulation.
+- Interactive spatial victory/defeat debrief with completion time, casualty result, Try Again, End Training, and the exact instruction `Press the Digital Crown to exit.`
+- Complete reset/end event paths for timer, health exposure, outcome, one-shot fire start, fire/char rendering, delayed extinguisher spawn, pickup latch, spray cone, and hiss.
 - Debug-only event controls for Rescue Next Casualty, Reach Exit, Expire Timer, and Deplete Health.
 - Release behavior that remains in Preparing and reports the missing anchor map instead of inventing spatial content.
 
@@ -22,36 +26,33 @@ Primary implementation files:
 - `simulation/ScenarioSession.swift`
 - `simulation/AppModel.swift`
 - `simulation/HUDView.swift`
+- `simulation/HeadFollowSmoother.swift`
 - `simulation/ScenarioResultView.swift`
 - `simulation/ImmersiveMeshView.swift`
 - `simulation/ControlWindowView.swift`
 
 ### Debug behavior while the map is unavailable
 
-Debug builds register two non-spatial casualty IDs so the mission state, HUD, all outcome paths, debrief, and reset behavior can be exercised from the control window. This is event-only validation: it does not spawn a casualty, exit, authored fire, anchor, transform, or route.
+Debug builds register two non-spatial casualty IDs so the mission state, HUD, all outcome paths, debrief, and reset behavior can be exercised from the control window. After scene reconstruction has supplied enough eligible cells, the first scene pinch also creates five mapless random fires 1.5–4.0 metres around the learner for extinguisher training. This does not spawn a casualty, exit, authored furniture-bound fire, anchor, or route.
 
 ### Unable to implement until the anchor map is supplied
 
 - Importing and validating the real anchor map and its training-zone alignment reference.
-- Binding the five authored fire identifiers to real transforms.
+- Replacing the Debug mapless random fire source with the five authored furniture-bound fire identifiers and real transforms.
 - Making authored blocking fires persist at those real locations until extinguished.
 - Binding real casualty identifiers to casualty assets and transforms.
 - Tapping a real casualty, removing its entity, and playing spatial rescue feedback.
 - Binding the single exit-door identifier to its real transform and proximity dwell zone.
-- Disabling free-form fire ignition in favor of authored scenario-fire startup.
+- Validating the one-shot fire-start event against the map adapter instead of the current Debug random placement source.
 - Validating occlusion, reachability, alignment, collision, route safety, and exit accuracy.
 - Completing the required physical Vision Pro end-to-end scenario run.
 
 None of these blocked spatial features has been approximated with a temporary or head-relative placement.
 
-### Verification completed locally
+### Current local verification
 
-- Debug visionOS Simulator build passed with Swift warnings treated as errors.
-- Release visionOS Simulator build passed with Swift warnings treated as errors.
-- Generic visionOS device build passed with Swift warnings treated as errors and code signing disabled for local compilation.
-- Xcode static analysis passed for the Debug visionOS Simulator target.
-- `Info.plist` validation passed, and this plan is included in the built app bundle.
-- Release binary inspection confirmed that the Debug event-control labels are absent.
+- The updated one-shot fire flow, delayed extinguisher lifecycle, pickup latch, and split HUD pass a Debug visionOS Simulator build with Swift warnings treated as errors.
+- Final Debug/Release simulator builds, generic device compilation, Xcode analysis, bundle validation, and Release source checks remain part of the completion pass below.
 
 The interactive mission flow has not been marked as physically validated. Scene reconstruction is unavailable in the simulator, and the final spatial route cannot be run until the anchor map is supplied and the app is exercised on a physical Apple Vision Pro.
 
@@ -61,10 +62,11 @@ Phase 2 is a timed fire-response training scenario. The learner must move throug
 
 The scenario should remain simple to understand:
 
-1. Pick up the fire extinguisher.
-2. Extinguish fires that prevent safe progress.
-3. Pick up every casualty.
-4. Find and reach the exit before time runs out.
+1. Pinch a scanned surface once to start the fire event.
+2. Look at the extinguisher when it appears and pinch to equip it.
+3. Extinguish fires that prevent safe progress.
+4. Pick up every casualty.
+5. Find and reach the exit before time runs out.
 
 Extinguishing every fire is not a victory requirement. Fire is an environmental hazard and route obstacle, not a checklist objective.
 
@@ -112,7 +114,7 @@ This would unnecessarily delay the timer, objective HUD, result screens, mission
 - Pattern: Live mission HUD followed by a deterministic debrief screen.
 - Primary action: Move through the scenario and rescue casualties.
 - Supporting action: Extinguish fires that obstruct safe progress.
-- Core path: Enter Phase 2 → pick up extinguisher → manage hazards → rescue casualties → reach exit → receive debrief.
+- Core path: Enter Phase 2 → start five fires once → wait five seconds → gaze-and-pinch extinguisher → manage hazards → rescue casualties → reach exit → receive debrief.
 - Recovery path: Defeat screen → Try Again → complete scenario reset → restart at `05:00`.
 - Required states: Preparing, active, victory, defeat, map error, reset in progress.
 - Handoff constraint: The anchor map supplies spatial transforms only; it must not own timer, objective, or outcome rules.
@@ -143,7 +145,8 @@ The casualty count is not hardcoded in the mission logic. At scenario start, eve
 
 - The timer counts down from `05:00` using real elapsed time.
 - Health and fire-proximity damage operate normally.
-- The extinguisher follows its existing five-second spawn, pickup, held-pinch spray, hiss, and cleanup behavior.
+- The first valid fire-start pinch creates five fires once and starts the extinguisher's five-second spawn delay.
+- An active pinch targeted at the available extinguisher equips it immediately. The pickup pinch cannot spray; a later targeted pinch-and-hold controls the cone and hiss.
 - Casualties can be rescued once each.
 - Exit proximity can resolve the attempt.
 
@@ -164,7 +167,7 @@ The casualty count is not hardcoded in the mission logic. At scenario start, eve
 - Existing fires, char, casualty state, exit state, outcome state, health exposure, timer state, extinguisher state, spray cone, and hiss are cleared.
 - The same validated anchor map is reused if it is still available and aligned.
 - The scenario returns to Active with full health, all casualties restored, and the timer reset to `05:00`.
-- The extinguisher begins a fresh five-second spawn cycle.
+- Fire start returns to `awaitingFireStart`; no extinguisher countdown exists until a new successful five-fire start pinch.
 
 ## 7. Fixed five-minute timer
 
@@ -177,6 +180,15 @@ The casualty count is not hardcoded in the mission logic. At scenario start, eve
 - The timer freezes on victory, defeat, reset, or exit from Phase 2.
 
 ## 8. Fire behavior
+
+### Current Debug mapless behavior
+
+- The first valid non-extinguisher scene pinch selects exactly five occupied grid cells 1.5–4.0 metres from the learner, 1.8–0.35 metres below head height, and at least 0.8 metres apart.
+- Placement is atomic. If five eligible cells are unavailable, no fire starts, no extinguisher countdown begins, and the learner is prompted to scan more surfaces.
+- After successful placement, later scene pinches are ignored by the fire-start system until reset.
+- This random source is Debug mapless training only and must never become a Release fallback for a missing or invalid anchor map.
+
+### Final anchor-map behavior
 
 - The five authored fires spawn only at their validated map anchors.
 - Authored blocking fires remain active until extinguished or until the scenario ends, so waiting does not remove the training obstacle.
@@ -219,12 +231,12 @@ No temporary exit entity or proximity zone will be added before the real anchor 
 
 ## 11. HUD and in-scenario guidance
 
-The existing head-following HUD remains the main status surface:
+The head-following HUD uses separate peripheral status surfaces:
 
-- Top-left: health.
-- Below health: casualty progress, shown as `CASUALTIES 0/N`.
-- Bottom-right: fixed five-minute countdown.
-- Existing extinguisher pickup and spray guidance remains available when relevant.
+- Upper-left: health, casualty progress shown as `CASUALTIES 0/N`, mission guidance, and contextual extinguisher guidance.
+- Upper-right: fixed five-minute countdown.
+- Centre: no status canvas; it is reserved for the physical scene and, after an outcome, the result surface.
+- The attachments and equipped extinguisher follow a stabilized approximately 60 Hz head pose rather than stepping with the 10 Hz fire simulation.
 
 Mission guidance should remain concise:
 
@@ -281,6 +293,10 @@ Supporting results:
 
 Try Again performs a complete scenario reset. End Training stops all scenario systems, dismisses Phase 2 safely, and returns to the existing phase-selection flow.
 
+Both outcomes also show:
+
+> Press the Digital Crown to exit.
+
 ## 13. Debug-only validation before the anchor map
 
 The existing control window may expose the following actions only in Debug builds:
@@ -297,15 +313,14 @@ This allows the five-minute timer, objective progress, victory, each defeat reas
 
 ## 14. Work that can proceed before the anchor map
 
-1. Add the map-independent scenario session state and fixed 300-second timer.
-2. Add casualty objective registration and idempotent rescue events.
-3. Add exit outcome evaluation.
-4. Connect zero health and timer expiry to Defeat.
-5. Add casualty progress and mission guidance to the HUD.
-6. Add victory and defeat debrief screens.
-7. Add Try Again and End Training cleanup behavior.
-8. Add Debug-only mission-event controls.
-9. Build for generic visionOS Simulator and generic visionOS device, then run Xcode analysis.
+1. Map-independent scenario session state and fixed 300-second timer. Implemented.
+2. Casualty objective registration and idempotent rescue events. Implemented.
+3. Exit outcome evaluation, health defeat, and timer defeat. Implemented.
+4. One-shot atomic five-fire Debug placement. Implemented.
+5. Post-fire extinguisher delay, gaze pickup latch, cone, hiss, and cleanup. Implemented.
+6. Peripheral stabilized HUD and victory/defeat debrief. Implemented.
+7. Try Again, End Training, Digital Crown guidance, and Debug event controls. Implemented.
+8. Strict local build, analysis, and bundle validation. Required before handoff.
 
 ## 15. Work held until the anchor map arrives
 
@@ -313,7 +328,7 @@ This allows the five-minute timer, objective progress, victory, each defeat reas
 2. Bind the five fire identifiers to their authored transforms.
 3. Bind every casualty identifier to its real transform and casualty entity.
 4. Bind the single exit identifier to its real door transform and proximity zone.
-5. Replace free-form fire ignition in scenario mode with map-authored fire startup.
+5. Replace the Debug random fire source with map-authored furniture fire startup while retaining the one-shot event and post-start extinguisher delay.
 6. Validate occlusion, reachability, collision, comfort, and route safety on physical Vision Pro hardware.
 
 ## 16. Manual validation plan
@@ -323,6 +338,12 @@ No automated scenario tests are required. The completed scenario must pass the f
 ### Before anchor integration
 
 - Scenario begins at exactly `05:00` and counts down accurately.
+- The extinguisher is absent before fire start.
+- One scene pinch creates exactly five separated fires; later scene pinches create none.
+- The extinguisher appears five seconds after successful fire placement, never five seconds after immersive entry.
+- Gaze-and-pinch equips immediately, and that pickup pinch never sprays.
+- A later targeted pinch-and-hold shows the white cone and hiss; release or cancellation removes both immediately.
+- The held extinguisher stays lower-right, the status HUD stays upper-left, the timer stays upper-right, and all follow head movement smoothly.
 - Rescue events update progress once per casualty identifier.
 - Repeating the same rescue event does not double-count.
 - Reaching the exit with all casualties rescued and time remaining shows Victory.
@@ -330,8 +351,9 @@ No automated scenario tests are required. The completed scenario must pass the f
 - Timer expiry shows Defeat once and freezes the scenario.
 - Zero health shows Defeat once and freezes the scenario.
 - Fire state is never used as a victory requirement.
-- Try Again restores health, timer, casualties, fires, extinguisher spawn, and Active state.
+- Try Again restores health, timer, casualties, and Active state; it clears fires and the extinguisher, then requires a new successful start pinch before beginning another five-second spawn delay.
 - End Training stops the timer, fire updates, spray visual, and hiss.
+- Victory and defeat both show `Press the Digital Crown to exit.`
 
 ### After anchor integration on physical Vision Pro
 
@@ -359,6 +381,7 @@ The scenario is complete when:
 - Victory occurs only after all casualties are rescued and the exit is reached with time remaining.
 - Defeat occurs on timeout, zero health, or reaching the exit with casualties left behind.
 - Victory and defeat screens show the approved copy and correct results.
+- Both result screens show `Press the Digital Crown to exit.`
 - Try Again fully resets the scenario and End Training fully cleans it up.
 - Fire completion is never treated as a victory requirement.
 - Missing or invalid spatial data blocks startup with a clear error and never falls back to a fake placement.
