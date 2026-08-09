@@ -3,8 +3,8 @@ import RealityKit
 
 enum ItemCategory: String, CaseIterable {
     case furniture = "Furniture"
-    case appliances = "Appliances"
-    case belongings = "Belongings"
+    case safety    = "Safety"
+    case equipment = "Equipment"
 }
 
 struct ItemType: Equatable {
@@ -13,16 +13,29 @@ struct ItemType: Equatable {
     let category: ItemCategory
 
     static let allTypes: [ItemType] = [
-        ItemType(name: "Couch",        sfSymbol: "rectangle.split.3x1.fill", category: .furniture),
-        ItemType(name: "Table",        sfSymbol: "tablecells",               category: .furniture),
-        ItemType(name: "Chair",        sfSymbol: "chair",                    category: .furniture),
-        ItemType(name: "Bed",          sfSymbol: "cone.fill",                category: .furniture),
-        ItemType(name: "Stove",        sfSymbol: "flame.fill",               category: .appliances),
-        ItemType(name: "Refrigerator", sfSymbol: "refrigerator.fill",        category: .appliances),
-        ItemType(name: "Washer",       sfSymbol: "washer.fill",              category: .appliances),
-        ItemType(name: "Bag",          sfSymbol: "bag.fill",                 category: .belongings),
-        ItemType(name: "Box",          sfSymbol: "shippingbox.fill",         category: .belongings),
-        ItemType(name: "Bicycle",      sfSymbol: "bicycle",                  category: .belongings),
+        // Furniture
+        ItemType(name: "Office Chair",     sfSymbol: "chair.lounge.fill",         category: .furniture),
+        ItemType(name: "Desk",             sfSymbol: "tablecells",                category: .furniture),
+        ItemType(name: "Conference Table", sfSymbol: "rectangle.split.3x1.fill",  category: .furniture),
+        ItemType(name: "Bookshelf",        sfSymbol: "books.vertical.fill",       category: .furniture),
+        ItemType(name: "Filing Cabinet",   sfSymbol: "archivebox.fill",           category: .furniture),
+        ItemType(name: "Whiteboard",       sfSymbol: "rectangle.dashed",          category: .furniture),
+
+        // Safety
+        ItemType(name: "Fire Extinguisher", sfSymbol: "flame.circle.fill",        category: .safety),
+        ItemType(name: "Smoke Detector",    sfSymbol: "sensor.fill",              category: .safety),
+        ItemType(name: "First Aid Kit",     sfSymbol: "cross.case.fill",          category: .safety),
+        ItemType(name: "Emergency Exit",    sfSymbol: "door.right.hand.open",     category: .safety),
+        ItemType(name: "Sprinkler",         sfSymbol: "drop.fill",                category: .safety),
+        ItemType(name: "Alarm",             sfSymbol: "bell.fill",                category: .safety),
+
+        // Equipment
+        ItemType(name: "Monitor",  sfSymbol: "display",                     category: .equipment),
+        ItemType(name: "Laptop",   sfSymbol: "laptopcomputer",              category: .equipment),
+        ItemType(name: "Printer",  sfSymbol: "printer.fill",                category: .equipment),
+        ItemType(name: "Phone",    sfSymbol: "phone.fill",                  category: .equipment),
+        ItemType(name: "Projector", sfSymbol: "video.fill",                 category: .equipment),
+        ItemType(name: "Server",   sfSymbol: "externaldrive.fill",          category: .equipment),
     ]
 }
 

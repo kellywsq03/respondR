@@ -4,7 +4,7 @@ struct LayoutSelectionView: View {
     @Binding var screen: AppScreen
 
     var body: some View {
-        BillboardedPanel(initialScale: 5.0) {
+        BillboardedPanel(initialScale: 7.5) {
             VStack(spacing: 6) {
                 HStack(spacing: 6) {
                     Button {

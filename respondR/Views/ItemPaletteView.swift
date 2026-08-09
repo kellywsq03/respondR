@@ -83,7 +83,7 @@ struct ItemPaletteView: View {
                 .padding(14)
             }
         }
-        .frame(width: 280)
+        .frame(width: 280, height: 1000)
         .glassBackgroundEffect()
     }
 }
@@ -124,9 +124,9 @@ private struct PaletteCell: View {
 
     private var placeholderColor: Color {
         switch item.category {
-        case .furniture:  return .blue
-        case .appliances: return .orange
-        case .belongings: return .green
+        case .furniture: return .blue
+        case .safety:    return .red
+        case .equipment: return .green
         }
     }
 }

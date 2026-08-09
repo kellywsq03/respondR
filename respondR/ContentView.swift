@@ -27,6 +27,9 @@ struct BillboardedPanel<Content: View>: View {
         RealityView { rvContent, attachments in
             if let panel = attachments.entity(for: "panel") {
                 panel.name = "billboardPanel"
+                // Sit near the bottom of the volumetric window so the system window bar
+                // (fixed at the volume's bottom face) is close to the panel content.
+                panel.position = [0, -0.2, 0]
                 panel.components.set(BillboardComponent())
                 panel.components.set(InputTargetComponent())
                 rvContent.add(panel)

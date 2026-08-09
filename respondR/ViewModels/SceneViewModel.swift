@@ -14,7 +14,7 @@ class SceneViewModel {
 
     // Left of center (leaves room for trailing panel), below center (tabletop feel), forward toward viewer
     var tabletopTranslation: SIMD3<Float> = [-0.1, -0.1, 0.05]
-    var tabletopScale: Float = 1.0
+    var tabletopScale: Float = 2.5
     var tabletopRotation: simd_quatf = simd_quatf(angle: 0, axis: [0, 1, 0])
 
     func placeItem(_ type: ItemType, at localPosition: SIMD3<Float>) -> PlacedItem {
@@ -25,6 +25,11 @@ class SceneViewModel {
     }
 
     func removeItem(id: UUID) {
+        // Free the grid cell the item was occupying so a new item can be placed there.
+        if let item = placedItems.first(where: { $0.id == id }),
+           let cell = floorGrid?.cellAt(local: item.position) {
+            floorGrid?.free(col: cell.col, row: cell.row)
+        }
         placedItems.removeAll { $0.id == id }
         if selectedPlacedItemID == id {
             selectedPlacedItemID = nil

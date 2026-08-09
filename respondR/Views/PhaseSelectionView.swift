@@ -4,7 +4,7 @@ struct PhaseSelectionView: View {
     @Binding var screen: AppScreen
 
     var body: some View {
-        BillboardedPanel(initialScale: 3.6) {
+        BillboardedPanel(initialScale: 5.5) {
             VStack(spacing: 10) {
                 VStack(spacing: 2) {
                     Text("RespondR")
