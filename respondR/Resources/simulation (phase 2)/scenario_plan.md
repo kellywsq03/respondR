@@ -51,8 +51,11 @@ None of these blocked spatial features has been approximated with a temporary or
 
 ### Current local verification
 
-- The updated one-shot fire flow, delayed extinguisher lifecycle, pickup latch, and split HUD pass a Debug visionOS Simulator build with Swift warnings treated as errors.
-- Final Debug/Release simulator builds, generic device compilation, Xcode analysis, bundle validation, and Release source checks remain part of the completion pass below.
+- Strict Debug and Release visionOS Simulator builds pass with Swift warnings treated as errors.
+- A strict generic visionOS device build passes with code signing disabled for local compilation.
+- Xcode static analysis passes for the Debug visionOS Simulator target.
+- `Info.plist`, whitespace, exact Digital Crown copy, call-site, and bundle-resource checks pass. The Release app contains `Fire_Extinguisher.usdz` and this plan.
+- Release binary inspection confirms that the Debug event-control labels are absent.
 
 The interactive mission flow has not been marked as physically validated. Scene reconstruction is unavailable in the simulator, and the final spatial route cannot be run until the anchor map is supplied and the app is exercised on a physical Apple Vision Pro.
 
