@@ -22,8 +22,9 @@ class SceneViewModel {
     private let fireSpreadIntervalNanoseconds: UInt64 = 700_000_000
     private let fireSpreadFanoutPerSource = 3
     private let maximumFireMarkersPerSource = 240
-    /// Adjust this value to tune how long a fire must touch an object before it burns away.
-    private let objectBurnDuration: TimeInterval = 4.0
+    /// Wood uses this base delay; plastic burns at 75%, metal at 200%, and
+    /// fireproof objects do not receive a burn timer.
+    private let woodBurnDuration: TimeInterval = 4.0
     private var fireSpreadTask: Task<Void, Never>? = nil
     private var objectIgnitionTimes: [UUID: Date] = [:]
 
@@ -126,7 +127,13 @@ class SceneViewModel {
     /// through them until the timer removes the object and frees that cell.
     private func igniteAndBurnTouchedObjects(in grid: inout FloorGrid, tabletop: Entity) {
         let activeFires = placedItems.filter { $0.itemType.isFire && $0.fireSourceID != nil }
-        let nonFireIDs = Set(placedItems.filter { !$0.itemType.isFire }.map(\.id))
+        let burnableItems: [UUID: TimeInterval] = Dictionary(
+            uniqueKeysWithValues: placedItems.compactMap { item -> (UUID, TimeInterval)? in
+                guard let material = item.itemType.combustionMaterial,
+                      let burnDuration = material.burnDuration(base: woodBurnDuration) else { return nil }
+                return (item.id, burnDuration)
+            }
+        )
         let now = Date()
 
         for fire in activeFires {
@@ -134,15 +141,16 @@ class SceneViewModel {
             for rowDelta in -1...1 {
                 for colDelta in -1...1 where colDelta != 0 || rowDelta != 0 {
                     let occupantID = grid.occupant(col: cell.col + colDelta, row: cell.row + rowDelta)
-                    if let occupantID, nonFireIDs.contains(occupantID), objectIgnitionTimes[occupantID] == nil {
+                    if let occupantID, burnableItems[occupantID] != nil, objectIgnitionTimes[occupantID] == nil {
                         objectIgnitionTimes[occupantID] = now
                     }
                 }
             }
         }
 
-        let burnedObjectIDs = objectIgnitionTimes.compactMap { id, ignitionTime in
-            now.timeIntervalSince(ignitionTime) >= objectBurnDuration ? id : nil
+        let burnedObjectIDs: [UUID] = objectIgnitionTimes.compactMap { id, ignitionTime -> UUID? in
+            guard let burnDuration = burnableItems[id] else { return nil }
+            return now.timeIntervalSince(ignitionTime) >= burnDuration ? id : nil
         }
         guard !burnedObjectIDs.isEmpty else { return }
 
