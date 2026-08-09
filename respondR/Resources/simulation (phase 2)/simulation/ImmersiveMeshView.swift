@@ -338,10 +338,10 @@ struct ImmersiveMeshView: View {
         resultEntity: Entity?
     ) {
         statusEntity?.transform = Transform(
-            matrix: headTransform * translation(x: -0.45, y: 0.25, z: -1.15)
+            matrix: headTransform * translation(x: -0.45, y: 0.20, z: -1.15)
         )
         timerEntity?.transform = Transform(
-            matrix: headTransform * translation(x: 0.45, y: 0.25, z: -1.15)
+            matrix: headTransform * translation(x: 0, y: 0.225, z: -1.15)
         )
         resultEntity?.transform = Transform(
             matrix: headTransform * translation(x: 0, y: 0, z: -0.95)
