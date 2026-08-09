@@ -49,8 +49,6 @@ struct PhaseSelectionView: View {
                                 } catch {
                                     print("Phase I preload error:", error)
                                     preloadErrorMessage = "Unable to download assets for Phase I. Please try again."
-                                    isPreloadingPhase1 = false
-                                    return
                                 }
                                 isPreloadingPhase1 = false
                             }
