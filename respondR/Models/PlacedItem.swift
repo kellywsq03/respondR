@@ -32,8 +32,9 @@ struct ItemType: Equatable {
     let sfSymbol: String
     let category: ItemCategory
     let combustionMaterial: CombustionMaterial?
+    let usdzResourceName: String?
 
-    static let fire = ItemType(name: "Fire", sfSymbol: "flame.fill", category: .hazard, combustionMaterial: nil)
+    static let fire = ItemType(name: "Fire", sfSymbol: "flame.fill", category: .hazard, combustionMaterial: nil, usdzResourceName: "Flame")
 
     var isFire: Bool { self == Self.fire }
 
@@ -44,28 +45,30 @@ struct ItemType: Equatable {
         .fire,
 
         // Furniture
-        ItemType(name: "Office Chair",     sfSymbol: "chair.lounge.fill",         category: .furniture, combustionMaterial: .wood),
-        ItemType(name: "Desk",             sfSymbol: "tablecells",                category: .furniture, combustionMaterial: .wood),
-        ItemType(name: "Conference Table", sfSymbol: "rectangle.split.3x1.fill",  category: .furniture, combustionMaterial: .wood),
-        ItemType(name: "Bookshelf",        sfSymbol: "books.vertical.fill",       category: .furniture, combustionMaterial: .wood),
-        ItemType(name: "Filing Cabinet",   sfSymbol: "archivebox.fill",           category: .furniture, combustionMaterial: .metal),
-        ItemType(name: "Whiteboard",       sfSymbol: "rectangle.dashed",          category: .furniture, combustionMaterial: .fireproof),
+        ItemType(name: "Office Chair",     sfSymbol: "chair.lounge.fill",         category: .furniture, combustionMaterial: .wood, usdzResourceName: nil),
+        ItemType(name: "Desk",             sfSymbol: "tablecells",                category: .furniture, combustionMaterial: .wood, usdzResourceName: nil),
+        ItemType(name: "Conference Table", sfSymbol: "rectangle.split.3x1.fill",  category: .furniture, combustionMaterial: .wood, usdzResourceName: nil),
+        ItemType(name: "Bookshelf",        sfSymbol: "books.vertical.fill",       category: .furniture, combustionMaterial: .wood, usdzResourceName: nil),
+        ItemType(name: "Filing Cabinet",   sfSymbol: "archivebox.fill",           category: .furniture, combustionMaterial: .metal, usdzResourceName: "filingcabinet"),
+        ItemType(name: "Wardrobe",         sfSymbol: "cabinet.fill",              category: .furniture, combustionMaterial: .wood, usdzResourceName: "wardrobe"),
+        ItemType(name: "Basin",            sfSymbol: "sink.fill",                 category: .furniture, combustionMaterial: .fireproof, usdzResourceName: "basin"),
+        ItemType(name: "Whiteboard",       sfSymbol: "rectangle.dashed",          category: .furniture, combustionMaterial: .fireproof, usdzResourceName: nil),
 
         // Safety
-        ItemType(name: "Fire Extinguisher", sfSymbol: "flame.circle.fill",        category: .safety, combustionMaterial: .metal),
-        ItemType(name: "Smoke Detector",    sfSymbol: "sensor.fill",              category: .safety, combustionMaterial: .fireproof),
-        ItemType(name: "First Aid Kit",     sfSymbol: "cross.case.fill",          category: .safety, combustionMaterial: .plastic),
-        ItemType(name: "Emergency Exit",    sfSymbol: "door.right.hand.open",     category: .safety, combustionMaterial: .fireproof),
-        ItemType(name: "Sprinkler",         sfSymbol: "drop.fill",                category: .safety, combustionMaterial: .metal),
-        ItemType(name: "Alarm",             sfSymbol: "bell.fill",                category: .safety, combustionMaterial: .metal),
+        ItemType(name: "Fire Extinguisher", sfSymbol: "flame.circle.fill",        category: .safety, combustionMaterial: .metal, usdzResourceName: nil),
+        ItemType(name: "Smoke Detector",    sfSymbol: "sensor.fill",              category: .safety, combustionMaterial: .fireproof, usdzResourceName: nil),
+        ItemType(name: "First Aid Kit",     sfSymbol: "cross.case.fill",          category: .safety, combustionMaterial: .plastic, usdzResourceName: nil),
+        ItemType(name: "Emergency Exit",    sfSymbol: "door.right.hand.open",     category: .safety, combustionMaterial: .fireproof, usdzResourceName: nil),
+        ItemType(name: "Sprinkler",         sfSymbol: "drop.fill",                category: .safety, combustionMaterial: .metal, usdzResourceName: nil),
+        ItemType(name: "Alarm",             sfSymbol: "bell.fill",                category: .safety, combustionMaterial: .metal, usdzResourceName: nil),
 
         // Equipment
-        ItemType(name: "Monitor",  sfSymbol: "display",                     category: .equipment, combustionMaterial: .plastic),
-        ItemType(name: "Laptop",   sfSymbol: "laptopcomputer",              category: .equipment, combustionMaterial: .plastic),
-        ItemType(name: "Printer",  sfSymbol: "printer.fill",                category: .equipment, combustionMaterial: .plastic),
-        ItemType(name: "Phone",    sfSymbol: "phone.fill",                  category: .equipment, combustionMaterial: .plastic),
-        ItemType(name: "Projector", sfSymbol: "video.fill",                 category: .equipment, combustionMaterial: .plastic),
-        ItemType(name: "Server",   sfSymbol: "externaldrive.fill",          category: .equipment, combustionMaterial: .metal),
+        ItemType(name: "Monitor",  sfSymbol: "display",                     category: .equipment, combustionMaterial: .plastic, usdzResourceName: nil),
+        ItemType(name: "Laptop",   sfSymbol: "laptopcomputer",              category: .equipment, combustionMaterial: .plastic, usdzResourceName: nil),
+        ItemType(name: "Printer",  sfSymbol: "printer.fill",                category: .equipment, combustionMaterial: .plastic, usdzResourceName: nil),
+        ItemType(name: "Phone",    sfSymbol: "phone.fill",                  category: .equipment, combustionMaterial: .plastic, usdzResourceName: nil),
+        ItemType(name: "Projector", sfSymbol: "video.fill",                 category: .equipment, combustionMaterial: .plastic, usdzResourceName: nil),
+        ItemType(name: "Server",   sfSymbol: "externaldrive.fill",          category: .equipment, combustionMaterial: .metal, usdzResourceName: nil),
     ]
 }
 
