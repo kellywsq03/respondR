@@ -5,45 +5,20 @@ struct LayoutSelectionView: View {
     @Environment(SceneViewModel.self) var viewModel
 
     var body: some View {
-<<<<<<< HEAD
         BillboardedPanel(initialScale: 7.5) {
             VStack(spacing: 6) {
                 HStack(spacing: 6) {
-=======
-        BillboardedPanel {
-            VStack(spacing: 32) {
-                // Header
-                HStack {
->>>>>>> 29e401a (add scanned assets to view)
                     Button {
                         screen = .phaseSelection
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.caption.weight(.medium))
                     }
-<<<<<<< HEAD
                     Text("Select Layout")
                         .font(.caption.weight(.bold))
                 }
 
                 HStack(spacing: 5) {
-=======
-
-                    Spacer()
-
-                    Text("Select Layout")
-                        .font(.title2.bold())
-
-                    Spacer()
-
-                    Label("Back", systemImage: "chevron.left")
-                        .font(.body.weight(.medium))
-                        .opacity(0)
-                }
-
-                // Layouts
-                HStack(spacing: 24) {
->>>>>>> 29e401a (add scanned assets to view)
                     ForEach(LayoutConfig.all) { layout in
                         Button {
                             screen = .liveScene(layout: layout.id)
