@@ -506,7 +506,7 @@ struct SceneView: View {
                             .fixedSize()
                     }
                     Divider().frame(height: 18)
-                    Text(layout.name)
+                    Text(layout?.name ?? "Layout\(layout?.id ?? 0)")
                         .font(.body.weight(.semibold))
                         .lineLimit(1)
                 }
