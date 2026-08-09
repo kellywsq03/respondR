@@ -18,16 +18,12 @@ struct ItemType: Equatable {
         ItemType(name: "Desk",             sfSymbol: "tablecells",                category: .furniture),
         ItemType(name: "Conference Table", sfSymbol: "rectangle.split.3x1.fill",  category: .furniture),
         ItemType(name: "Bookshelf",        sfSymbol: "books.vertical.fill",       category: .furniture),
-        ItemType(name: "Filing Cabinet",   sfSymbol: "archivebox.fill",           category: .furniture),
         ItemType(name: "Whiteboard",       sfSymbol: "rectangle.dashed",          category: .furniture),
 
         // Safety
         ItemType(name: "Fire Extinguisher", sfSymbol: "flame.circle.fill",        category: .safety),
         ItemType(name: "Smoke Detector",    sfSymbol: "sensor.fill",              category: .safety),
         ItemType(name: "First Aid Kit",     sfSymbol: "cross.case.fill",          category: .safety),
-        ItemType(name: "Emergency Exit",    sfSymbol: "door.right.hand.open",     category: .safety),
-        ItemType(name: "Sprinkler",         sfSymbol: "drop.fill",                category: .safety),
-        ItemType(name: "Alarm",             sfSymbol: "bell.fill",                category: .safety),
 
         // Equipment
         ItemType(name: "Monitor",  sfSymbol: "display",                     category: .equipment),

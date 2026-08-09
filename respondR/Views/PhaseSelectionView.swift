@@ -4,7 +4,7 @@ struct PhaseSelectionView: View {
     @Binding var screen: AppScreen
 
     var body: some View {
-        BillboardedPanel(initialScale: 5.5) {
+        BillboardedPanel(initialScale: 5.5, anchorY: 0.05) {
             VStack(spacing: 10) {
                 VStack(spacing: 2) {
                     Text("RespondR")
@@ -44,9 +44,11 @@ struct PhaseSelectionView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(8)
+            .padding(.horizontal, 12)
+            .padding(.top, 14)
+            .padding(.bottom, 22)
             .fixedSize()
-            .glassBackgroundEffect()
+            .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
     }
 }
