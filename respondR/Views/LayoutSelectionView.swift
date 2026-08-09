@@ -33,7 +33,7 @@ struct LayoutSelectionView: View {
                 if !viewModel.preloadedAssetNames.isEmpty {
                     VStack(spacing: 12) {
                         Text("Scanned Assets")
-                            .font(.title3.bold())
+                            .font(.system(size: 10, weight: .semibold))
 
                         HStack(spacing: 16) {
                             ForEach(
@@ -62,29 +62,29 @@ private struct DownloadedAssetCard: View {
     let assetName: String
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 3) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color.accentColor.opacity(0.16))
 
                 Image(systemName: "cube.fill")
-                    .font(.system(size: 24))
+                    .font(.system(size: 10))
                     .foregroundStyle(.primary)
             }
-            .frame(width: 200, height: 100)
+            .frame(width: 56, height: 38)
 
             Text(assetName)
-                .font(.headline)
+                .font(.system(size: 8, weight: .semibold))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
 
         }
-        .padding(20)
+        .padding(4)
         .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
         )
         .hoverEffect()
     }
