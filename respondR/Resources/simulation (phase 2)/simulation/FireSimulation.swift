@@ -36,7 +36,7 @@ final class FireSimulation {
     init(
         cellSize: Float,
         ignitionDuration: TimeInterval = 0.6,
-        burnDuration: TimeInterval = 10.0,
+        burnDuration: TimeInterval = 20.0,
         spreadInterval: TimeInterval = 20,
         maxActive: Int = 50,
         spreadFanout: Int = 1
