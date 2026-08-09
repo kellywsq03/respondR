@@ -15,10 +15,12 @@ final class FireExtinguisherController {
 
     var onStateChange: ((FireExtinguisherSession.Phase, Bool) -> Void)?
     var onError: ((String) -> Void)?
+    var onDidSpawn: (() -> Void)?
 
     private let sceneRoot: Entity
     private let sprayEntity: ModelEntity?
     private var extinguisherEntity: Entity?
+    private var nozzleEntity: Entity?
     private var modelTemplate: Entity?
     private var preloadTask: Task<Void, Never>?
     private var preloadError: String?
@@ -40,7 +42,6 @@ final class FireExtinguisherController {
         do {
             let sprayEntity = try Self.makeSprayEntity()
             sprayEntity.isEnabled = false
-            sceneRoot.addChild(sprayEntity)
             self.sprayEntity = sprayEntity
         } catch {
             sprayEntity = nil
@@ -170,19 +171,16 @@ final class FireExtinguisherController {
             matrix: deviceTransform * Self.translation(x: 0.32, y: -0.38, z: -0.60)
         )
 
-        let nozzleTransform = deviceTransform * Self.translation(x: 0.32, y: -0.15, z: -0.62)
-        sprayEntity?.transform = Transform(matrix: nozzleTransform)
-
-        let apex = SIMD3<Float>(
-            nozzleTransform.columns.3.x,
-            nozzleTransform.columns.3.y,
-            nozzleTransform.columns.3.z
+        guard let nozzleEntity else {
+            currentSprayCone = nil
+            return
+        }
+        let apex = nozzleEntity.convert(position: .zero, to: nil)
+        let forwardPoint = nozzleEntity.convert(
+            position: SIMD3<Float>(0, 0, -1),
+            to: nil
         )
-        let direction = SIMD3<Float>(
-            -deviceTransform.columns.2.x,
-            -deviceTransform.columns.2.y,
-            -deviceTransform.columns.2.z
-        )
+        let direction = forwardPoint - apex
         currentSprayCone = SprayCone(
             apex: apex,
             direction: direction,
@@ -216,8 +214,35 @@ final class FireExtinguisherController {
         model.scale *= SIMD3<Float>(repeating: uniformScale)
         let normalizedBounds = container.visualBounds(relativeTo: container)
         model.position -= normalizedBounds.center
+        let centeredBounds = container.visualBounds(relativeTo: container)
         model.generateCollisionShapes(recursive: true)
         Self.enableInteraction(on: model)
+
+        let interactionProxy = Entity()
+        interactionProxy.name = "Fire extinguisher expanded pickup target"
+        interactionProxy.position = centeredBounds.center
+        interactionProxy.components.set(
+            CollisionComponent(
+                shapes: [ShapeResource.generateBox(size: centeredBounds.extents * 2)]
+            )
+        )
+        interactionProxy.components.set(InputTargetComponent())
+        interactionProxy.components.set(HoverEffectComponent())
+        container.addChild(interactionProxy)
+
+        let nozzle = Entity()
+        nozzle.name = "Fire extinguisher hose nozzle"
+        nozzle.position = SIMD3<Float>(
+            centeredBounds.min.x + centeredBounds.extents.x * 0.18,
+            centeredBounds.min.y + centeredBounds.extents.y * 0.10,
+            centeredBounds.min.z - 0.01
+        )
+        container.addChild(nozzle)
+        if let sprayEntity {
+            sprayEntity.transform = .identity
+            nozzle.addChild(sprayEntity)
+        }
+        nozzleEntity = nozzle
 
         container.transform = Transform(
             matrix: deviceTransform * Self.translation(x: 0.25, y: -0.40, z: -0.90)
@@ -228,6 +253,7 @@ final class FireExtinguisherController {
 
         session.didSpawn()
         notifyStateChange()
+        onDidSpawn?()
     }
 
     private func prepareHiss(on entity: Entity) {
@@ -250,6 +276,8 @@ final class FireExtinguisherController {
         hissController?.stop()
         hissController = nil
         sprayEntity?.isEnabled = false
+        sprayEntity?.removeFromParent()
+        nozzleEntity = nil
         extinguisherEntity?.removeFromParent()
         extinguisherEntity = nil
         currentSprayCone = nil
@@ -284,18 +312,14 @@ final class FireExtinguisherController {
         for index in 0..<segments {
             let current = UInt32(index + 1)
             let next = UInt32((index + 1) % segments + 1)
-            indices.append(contentsOf: [0, next, current])
+            indices.append(contentsOf: [0, next, current, 0, current, next])
         }
 
         var descriptor = MeshDescriptor(name: "extinguisher-spray-cone")
         descriptor.positions = MeshBuffers.Positions(positions)
         descriptor.primitives = .triangles(indices)
         let mesh = try MeshResource.generate(from: [descriptor])
-        let material = SimpleMaterial(
-            color: UIColor.white.withAlphaComponent(0.24),
-            roughness: 1,
-            isMetallic: false
-        )
+        let material = UnlitMaterial(color: UIColor.white.withAlphaComponent(0.45))
         let entity = ModelEntity(mesh: mesh, materials: [material])
         entity.name = "Active extinguisher spray cone"
         return entity
