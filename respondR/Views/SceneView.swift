@@ -318,7 +318,12 @@ func colorForCategory(_ category: ItemCategory) -> UIColor {
     }
 }
 
-func buildPlacedItemEntity(_ item: PlacedItem) -> ModelEntity {
+@MainActor
+func buildPlacedItemEntity(_ item: PlacedItem) -> Entity {
+    if item.itemType.usdzResourceName != nil {
+        return buildUSDZPlacedItemEntity(item)
+    }
+
     // Each marker fits within one 15 mm grid cell, so placement reserves exactly
     // the cell selected by the user without visual overhang.
     let boxSize: Float = 0.015
@@ -347,6 +352,71 @@ func buildPlacedItemEntity(_ item: PlacedItem) -> ModelEntity {
     entity.components.set(HoverEffectComponent())
     entity.components.set(PlacedItemComponent(itemID: item.id))
     return entity
+}
+
+/// Creates a placeable root immediately, then replaces its small loading marker with
+/// the requested USDZ. This preserves the existing grid/gesture behavior while an
+/// asset is loading asynchronously.
+@MainActor
+private func buildUSDZPlacedItemEntity(_ item: PlacedItem) -> Entity {
+    let root = Entity()
+    root.name = "placed_\(item.id.uuidString)"
+    root.position = item.position
+    root.components.set(PlacedItemComponent(itemID: item.id))
+    root.components.set(InputTargetComponent())
+    root.components.set(HoverEffectComponent())
+
+    let loadingMesh = MeshResource.generateBox(size: 0.012, cornerRadius: 0.002)
+    let loadingMaterial = SimpleMaterial(color: colorForCategory(item.itemType.category), roughness: 0.6, isMetallic: false)
+    let loadingMarker = ModelEntity(mesh: loadingMesh, materials: [loadingMaterial])
+    loadingMarker.name = "loadingAssetMarker"
+    loadingMarker.position.y = 0.006
+    loadingMarker.generateCollisionShapes(recursive: false)
+    root.addChild(loadingMarker)
+    configurePlacedItemInteraction(root, itemID: item.id)
+
+    let resourceName = item.itemType.usdzResourceName!
+    Task { @MainActor in
+        do {
+            guard let url = Bundle.main.url(forResource: resourceName, withExtension: "usdz", subdirectory: "ItemAssets")
+                    ?? Bundle.main.url(forResource: resourceName, withExtension: "usdz") else {
+                print("⚠️ USDZ asset '\(resourceName)' is not in the app bundle")
+                return
+            }
+            let asset = try await Entity(contentsOf: url)
+
+            // An item may have been removed while its asset was loading.
+            guard root.parent != nil else { return }
+
+            let bounds = asset.visualBounds(relativeTo: nil)
+            let size = bounds.max - bounds.min
+            let largestHorizontalDimension = max(size.x, size.z)
+            let targetFootprint: Float = 0.0125
+            let scale = largestHorizontalDimension > 0 ? targetFootprint / largestHorizontalDimension : 1
+            asset.scale = SIMD3(repeating: scale)
+            let center = (bounds.min + bounds.max) * 0.5
+            asset.position = SIMD3(-center.x * scale, -bounds.min.y * scale, -center.z * scale)
+
+            loadingMarker.removeFromParent()
+            root.addChild(asset)
+            configurePlacedItemInteraction(root, itemID: item.id)
+            root.generateCollisionShapes(recursive: true)
+            print("✅ Loaded placed USDZ asset: \(resourceName)")
+        } catch {
+            print("⚠️ Could not load USDZ asset '\(resourceName)': \(error)")
+        }
+    }
+    return root
+}
+
+@MainActor
+private func configurePlacedItemInteraction(_ entity: Entity, itemID: UUID) {
+    entity.components.set(PlacedItemComponent(itemID: itemID))
+    entity.components.set(InputTargetComponent())
+    entity.components.set(HoverEffectComponent())
+    for child in entity.children {
+        configurePlacedItemInteraction(child, itemID: itemID)
+    }
 }
 
 // MARK: - Scene View
