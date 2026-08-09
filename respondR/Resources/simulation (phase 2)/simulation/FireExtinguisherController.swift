@@ -19,6 +19,9 @@ final class FireExtinguisherController {
     private let sceneRoot: Entity
     private let sprayEntity: ModelEntity?
     private var extinguisherEntity: Entity?
+    private var modelTemplate: Entity?
+    private var preloadTask: Task<Void, Never>?
+    private var preloadError: String?
     private var spawnTask: Task<Void, Never>?
     private var hissController: AudioGeneratorController?
     private var session = FireExtinguisherSession()
@@ -45,21 +48,52 @@ final class FireExtinguisherController {
         }
     }
 
+    /// Loads and caches the asset without adding it to the immersive scene or
+    /// starting the five-second post-fire delay.
+    func preloadAsset() {
+        guard modelTemplate == nil, preloadTask == nil else { return }
+        preloadError = nil
+
+        preloadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { preloadTask = nil }
+
+            do {
+                modelTemplate = try await Entity(named: "Fire_Extinguisher", in: .main)
+            } catch is CancellationError {
+                return
+            } catch {
+                preloadError = error.localizedDescription
+            }
+        }
+    }
+
     func scheduleSpawn(deviceTransform: @escaping DeviceTransformProvider) {
-        clearForRestart()
+        clearAttempt()
         notifyStateChange()
 
         if let sprayMeshError {
             onError?(sprayMeshError)
         }
 
+        preloadAsset()
+        let pendingPreload = preloadTask
+
         spawnTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                async let model = Entity(named: "Fire_Extinguisher", in: .main)
                 try await Task.sleep(for: .seconds(5))
-                let loadedModel = try await model
+                if let pendingPreload {
+                    await pendingPreload.value
+                }
                 try Task.checkCancellation()
+
+                guard let modelTemplate else {
+                    throw FireExtinguisherError.assetLoadFailed(
+                        preloadError ?? "The asset could not be loaded."
+                    )
+                }
+                let loadedModel = modelTemplate.clone(recursive: true)
 
                 var devicePose = deviceTransform()
                 while devicePose == nil {
@@ -82,6 +116,13 @@ final class FireExtinguisherController {
 
     func resetAndSchedule(deviceTransform: @escaping DeviceTransformProvider) {
         scheduleSpawn(deviceTransform: deviceTransform)
+    }
+
+    /// Clears one attempt while retaining a successfully preloaded template for
+    /// the next fire-start event.
+    func resetForAwaitingFireStart() {
+        clearAttempt()
+        notifyStateChange()
     }
 
     func contains(_ entity: Entity) -> Bool {
@@ -155,7 +196,11 @@ final class FireExtinguisherController {
     }
 
     func cancel() {
-        clearForRestart()
+        clearAttempt()
+        preloadTask?.cancel()
+        preloadTask = nil
+        modelTemplate = nil
+        preloadError = nil
         notifyStateChange()
     }
 
@@ -203,7 +248,7 @@ final class FireExtinguisherController {
         }
     }
 
-    private func clearForRestart() {
+    private func clearAttempt() {
         spawnTask?.cancel()
         spawnTask = nil
         hissController?.stop()
@@ -294,11 +339,14 @@ final class FireExtinguisherController {
 
 private enum FireExtinguisherError: LocalizedError {
     case invalidAssetBounds
+    case assetLoadFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .invalidAssetBounds:
             "The fire extinguisher asset has invalid visual bounds."
+        case .assetLoadFailed(let message):
+            "The fire extinguisher asset could not be loaded: \(message)"
         }
     }
 }
