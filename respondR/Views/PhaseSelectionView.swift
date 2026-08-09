@@ -23,9 +23,9 @@ struct PhaseSelectionView: View {
 
                 if isPreloadingPhase1 {
                     HStack(spacing: 12) {
-                        ProgressView()
+                        ProgressView().controlSize(.mini)
                         Text("Preparing Phase I assets…")
-                            .font(.callout)
+                            .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -82,7 +82,7 @@ struct PhaseSelectionView: View {
             }
             .padding(8)
             .fixedSize()
-            .glassBackgroundEffect()
+            .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 10))
         }
     }
 }
