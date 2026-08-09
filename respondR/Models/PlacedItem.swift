@@ -5,6 +5,7 @@ enum ItemCategory: String, CaseIterable {
     case furniture = "Furniture"
     case safety    = "Safety"
     case equipment = "Equipment"
+    case hazard    = "Hazards"
 }
 
 struct ItemType: Equatable {
@@ -13,6 +14,11 @@ struct ItemType: Equatable {
     let category: ItemCategory
 
     static let allTypes: [ItemType] = [
+        // Hazards
+        // A fire is an initial ignition point in phase 1. Its spread behavior is
+        // deliberately deferred to the later simulation phase.
+        ItemType(name: "Fire", sfSymbol: "flame.fill", category: .hazard),
+
         // Furniture
         ItemType(name: "Office Chair",     sfSymbol: "chair.lounge.fill",         category: .furniture),
         ItemType(name: "Desk",             sfSymbol: "tablecells",                category: .furniture),

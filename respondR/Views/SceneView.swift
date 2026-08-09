@@ -314,14 +314,22 @@ func colorForCategory(_ category: ItemCategory) -> UIColor {
     case .furniture: return UIColor(red: 0.3, green: 0.6, blue: 0.9, alpha: 1.0)
     case .safety:    return UIColor(red: 0.9, green: 0.3, blue: 0.3, alpha: 1.0)
     case .equipment: return UIColor(red: 0.5, green: 0.8, blue: 0.4, alpha: 1.0)
+    case .hazard:    return UIColor(red: 1.0, green: 0.42, blue: 0.0, alpha: 1.0)
     }
 }
 
 func buildPlacedItemEntity(_ item: PlacedItem) -> ModelEntity {
-    // Every item is a 15 mm cube — matches the floor grid cellSize so a placed
-    // item occupies exactly one cell with no visual overhang.
+    // Each marker fits within one 15 mm grid cell, so placement reserves exactly
+    // the cell selected by the user without visual overhang.
     let boxSize: Float = 0.015
-    let mesh = MeshResource.generateBox(size: boxSize, cornerRadius: 0.002)
+    // Fire uses a rounded marker so an ignition point is immediately distinct
+    // from the square markers used for placeable room objects.
+    let mesh: MeshResource
+    if item.itemType.category == .hazard {
+        mesh = MeshResource.generateSphere(radius: boxSize * 0.55)
+    } else {
+        mesh = MeshResource.generateBox(size: boxSize, cornerRadius: 0.002)
+    }
     let collisionShape = ShapeResource.generateBox(size: SIMD3<Float>(repeating: boxSize))
     let yLift: Float = boxSize / 2
     let matColor = colorForCategory(item.itemType.category)
