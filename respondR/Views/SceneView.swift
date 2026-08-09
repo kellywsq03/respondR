@@ -744,6 +744,9 @@ struct SceneView: View {
         viewModel.floorGrid?.occupy(col: targetCol, row: targetRow, itemID: placed.id)
         let placedEntity = buildPlacedItemEntity(placed)
         tabletop.addChild(placedEntity)
+        if itemType.isFire {
+            viewModel.startFireSpread()
+        }
     }
 
     /// Snap a tabletop-local position to the nearest WALKABLE grid cell center.
@@ -757,6 +760,7 @@ struct SceneView: View {
     }
 
     private func resetViewModel() {
+        viewModel.stopFireSpread()
         viewModel.tabletopAnchor = nil
         viewModel.floorGrid = nil
         viewModel.selectedItemType = nil

@@ -13,11 +13,15 @@ struct ItemType: Equatable {
     let sfSymbol: String
     let category: ItemCategory
 
+    static let fire = ItemType(name: "Fire", sfSymbol: "flame.fill", category: .hazard)
+
+    var isFire: Bool { self == Self.fire }
+
     static let allTypes: [ItemType] = [
         // Hazards
-        // A fire is an initial ignition point in phase 1. Its spread behavior is
-        // deliberately deferred to the later simulation phase.
-        ItemType(name: "Fire", sfSymbol: "flame.fill", category: .hazard),
+        // A fire is an initial ignition point; phase 1 expands it across the
+        // walkable floor over time.
+        .fire,
 
         // Furniture
         ItemType(name: "Office Chair",     sfSymbol: "chair.lounge.fill",         category: .furniture),
@@ -49,6 +53,9 @@ struct PlacedItem: Identifiable {
     let id: UUID
     let itemType: ItemType
     var position: SIMD3<Float>
+    /// The original user-placed fire that this marker grew from. For an ignition
+    /// point, this is its own ID; non-fire items have no source.
+    let fireSourceID: UUID?
 }
 
 struct PlacedItemComponent: Component {
