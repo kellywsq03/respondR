@@ -303,7 +303,11 @@ final class MeshScanner {
                 let entity = ModelEntity(mesh: solid, materials: [OcclusionMaterial()])
                 entity.transform = Transform(matrix: anchor.originFromAnchorTransform)
                 entity.generateCollisionShapes(recursive: false)
-                entity.components.set(InputTargetComponent())
+                // Deliberately NO InputTargetComponent: nothing consumes taps on
+                // room surfaces any more (fires break out on their own), and an
+                // invisible input target wrapping every wall, floor and piece of
+                // furniture steals the gaze from the victim/extinguisher buttons
+                // floating out in the room.
                 rootEntity.addChild(entity)
                 meshEntities[anchor.id] = entity
             }
