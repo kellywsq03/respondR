@@ -13,6 +13,9 @@ struct FireGrid {
 
     var count: Int { occupied.count }
 
+    /// World-space centers of every occupied cell (for persisting a room map).
+    var centers: [SIMD3<Float>] { occupied.map { center(of: $0) } }
+
     func coord(for p: SIMD3<Float>) -> SIMD3<Int32> {
         SIMD3<Int32>(
             Int32(floor(p.x / cellSize)),

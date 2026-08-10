@@ -18,6 +18,15 @@ final class AppModel {
     var statusMessage: String? = nil
     var exportHandler: (@MainActor () -> String)? = nil
 
+    /// Cell count of the saved room map on disk (nil = no map saved).
+    var roomMapSurfaceCount: Int? = RoomMapStore.load()?.cellCount
+    /// True once this session has re-aligned the saved map to the real room.
+    var roomMapRestored: Bool = false
+    var saveRoomMapHandler: (@MainActor () async -> String)? = nil
+    var deleteRoomMapHandler: (@MainActor () async -> String)? = nil
+
+    var hasRoomMap: Bool { roomMapSurfaceCount != nil }
+
     enum Mode: String, CaseIterable, Identifiable {
         case wireframe = "Wireframe"
         case fire = "Fire"
@@ -79,11 +88,11 @@ final class AppModel {
         case .preparing:
             "Scenario map required before spatial training can begin."
         case .active where !hasStartedFire:
-            "Pinch a scanned surface to start five fires."
+            "Stay alert — a fire can break out anywhere in the room."
         case .active where remainingCasualties == 0:
-            "All casualties rescued. Find the exit."
+            "Casualty rescued. Return to the green beacon at your starting point."
         case .active:
-            "Rescue every casualty and reach the exit before time runs out. \(remainingCasualties) remaining."
+            "Extinguish fires in your path, rescue the victim, and return to your starting point before time runs out."
         case .victory:
             "Training scenario complete."
         case .defeat:

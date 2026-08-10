@@ -38,8 +38,15 @@ final class MeshScanner {
 
     enum Mode { case wireframe, fire }
     var mode: Mode = .wireframe
-    /// Called with new world-space vertex positions each anchor update (fire mode).
+    /// Called with new world-space vertex positions on each anchor update, in
+    /// both modes — wireframe sweeps feed the same grid the fire sim burns.
     var onGeometryUpdate: (([SIMD3<Float>]) -> Void)?
+
+    /// Saved room-map anchor to watch for. When ARKit relocalises and this
+    /// anchor becomes tracked, `onRoomAnchorResolved` fires with its transform.
+    var roomAnchorIDToResolve: UUID?
+    var onRoomAnchorResolved: ((simd_float4x4) -> Void)?
+    private var worldAnchorTask: Task<Void, Never>?
 
     private var meshEntities: [UUID: ModelEntity] = [:]
     private var exportGeometry: [UUID: RoomExporter.Mesh] = [:]
@@ -69,6 +76,25 @@ final class MeshScanner {
             return
         }
 
+        if worldTrackingRunning {
+            worldAnchorTask = Task { @MainActor [weak self] in
+                guard let worldTracking = self?.worldTracking else { return }
+                for await update in worldTracking.anchorUpdates {
+                    guard let self, !Task.isCancelled else { return }
+                    switch update.event {
+                    case .added, .updated:
+                        if let target = self.roomAnchorIDToResolve,
+                           update.anchor.id == target,
+                           update.anchor.isTracked {
+                            self.onRoomAnchorResolved?(update.anchor.originFromAnchorTransform)
+                        }
+                    case .removed:
+                        break
+                    }
+                }
+            }
+        }
+
         for await update in sceneReconstruction.anchorUpdates {
             let anchor = update.anchor
             switch update.event {
@@ -84,12 +110,28 @@ final class MeshScanner {
     }
 
     func stop() {
+        worldAnchorTask?.cancel()
+        worldAnchorTask = nil
         session.stop()
         worldTrackingRunning = false
         for entity in meshEntities.values { entity.removeFromParent() }
         meshEntities.removeAll()
         exportGeometry.removeAll()
         surfaceBuckets.removeAll()
+    }
+
+    /// Persists a world anchor at `transform` and returns its identifier.
+    /// The OS stores it durably for this app, so later sessions can relocalise
+    /// the saved room map against it.
+    func addRoomAnchor(at transform: simd_float4x4) async throws -> UUID {
+        let anchor = WorldAnchor(originFromAnchorTransform: transform)
+        try await worldTracking.addAnchor(anchor)
+        return anchor.id
+    }
+
+    /// Best-effort removal of a previously saved room anchor (re-map/delete).
+    func removeRoomAnchor(id: UUID) async {
+        try? await worldTracking.removeAnchor(forID: id)
     }
 
     func setMeshVisible(_ visible: Bool) {
@@ -245,11 +287,11 @@ final class MeshScanner {
         guard let geo = extractGeometry(from: anchor) else { return }
         let world = worldMesh(from: geo, transform: anchor.originFromAnchorTransform)
         exportGeometry[anchor.id] = world
+        onGeometryUpdate?(world.positions)
 
         switch mode {
         case .fire:
             indexSurface(world, for: anchor.id)
-            onGeometryUpdate?(world.positions)
             guard let solid = solidMesh(from: geo) else { return }
             if let existing = meshEntities[anchor.id] {
                 // Update visual/transform only. Collision is NOT regenerated per

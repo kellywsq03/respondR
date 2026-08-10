@@ -28,6 +28,13 @@ final class CasualtyController {
     private var lastDeviceTransform: simd_float4x4?
     private(set) var phase: Phase = .waiting
 
+    /// World position of the spawned, not-yet-rescued casualty, for the
+    /// floating "VICTIM" pointer label.
+    var availableWorldPosition: SIMD3<Float>? {
+        guard phase == .available else { return nil }
+        return casualtyEntity?.position(relativeTo: nil)
+    }
+
     init(sceneRoot: Entity) {
         self.sceneRoot = sceneRoot
     }
@@ -162,6 +169,26 @@ final class CasualtyController {
         model.position -= SIMD3<Float>(bounds.center.x, bounds.min.y, bounds.center.z)
         model.generateCollisionShapes(recursive: true)
         Self.enableInteraction(on: model)
+
+        // Generous expanded pickup target (like the extinguisher's): the model's
+        // own collision hugs a small lying figure, which makes gaze targeting
+        // fussy against the surrounding room mesh.
+        let centeredBounds = container.visualBounds(relativeTo: container)
+        let proxy = Entity()
+        proxy.name = "Casualty expanded rescue target"
+        proxy.position = centeredBounds.center
+        proxy.components.set(
+            CollisionComponent(
+                shapes: [
+                    ShapeResource.generateBox(
+                        size: simd_max(centeredBounds.extents, SIMD3<Float>(repeating: 0.25)) * 2
+                    )
+                ]
+            )
+        )
+        proxy.components.set(InputTargetComponent())
+        proxy.components.set(HoverEffectComponent())
+        container.addChild(proxy)
 
         container.position = floorPosition
         container.orientation = simd_quatf(

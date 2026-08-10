@@ -57,6 +57,9 @@ final class FireSimulation {
 
     var cellCount: Int { grid.count }
     var activeCount: Int { runtime.count }
+    var gridCellSize: Float { grid.cellSize }
+    /// World-space centers of every occupied cell (for persisting a room map).
+    var occupiedCellCenters: [SIMD3<Float>] { grid.centers }
 
     func insertGeometry(_ positions: [SIMD3<Float>]) {
         grid.insert(positions)
@@ -68,20 +71,24 @@ final class FireSimulation {
         return igniteCell(c, now: now)
     }
 
-    /// Selects and ignites a complete, separated set of mapless fires around
-    /// the learner. No cells are changed unless the full requested set exists.
+    /// Selects and ignites a complete, separated set of fires around the
+    /// learner. No cells are changed unless the full requested set exists.
+    /// The default ranges match the historical near-user behaviour; a restored
+    /// room map lets callers widen `horizontalDistance` to the whole room.
     @discardableResult
     func igniteRandomFires(
         around headPosition: SIMD3<Float>,
         count: Int = 5,
-        now: TimeInterval
+        now: TimeInterval,
+        horizontalDistance: ClosedRange<Float> = 1.5...4.0,
+        verticalOffset: ClosedRange<Float> = -1.8 ... -0.35
     ) -> [SIMD3<Float>] {
         guard count > 0, runtime.count + count <= maxActive else { return [] }
 
         let candidates = grid.occupiedCells(
             around: headPosition,
-            horizontalDistance: 1.5...4.0,
-            verticalOffset: -1.8 ... -0.35
+            horizontalDistance: horizontalDistance,
+            verticalOffset: verticalOffset
         ).filter { coordinate in
             runtime[coordinate] == nil
                 && !burnt.contains(coordinate)

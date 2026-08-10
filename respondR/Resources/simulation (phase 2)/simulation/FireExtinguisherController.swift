@@ -32,6 +32,12 @@ final class FireExtinguisherController {
 
     var phase: FireExtinguisherSession.Phase { session.phase }
     var isSpraying: Bool { session.isSpraying }
+    /// World position of the spawned, not-yet-picked-up extinguisher, for the
+    /// floating "EXTINGUISHER" pointer label.
+    var availableWorldPosition: SIMD3<Float>? {
+        guard session.phase == .available else { return nil }
+        return extinguisherEntity?.position(relativeTo: nil)
+    }
     var activeSprayCone: SprayCone? {
         session.isSpraying ? currentSprayCone : nil
     }

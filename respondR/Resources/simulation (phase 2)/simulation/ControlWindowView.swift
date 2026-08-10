@@ -57,7 +57,13 @@ struct ControlWindowView: View {
                         case .opened:
                             appModel.immersiveSpaceOpen = true
                             appModel.errorMessage = nil
-                            dismissWindow(id: AppSceneID.mainWindow)
+                            // Fire mode is the full scenario, so the control
+                            // window gets out of the way. Wireframe is the
+                            // room-mapping tool — keep the window open so the
+                            // Room Map controls stay reachable while sweeping.
+                            if appModel.mode == .fire {
+                                dismissWindow(id: AppSceneID.mainWindow)
+                            }
                         case .userCancelled:
                             appModel.immersiveSpaceOpen = false
                             appModel.errorMessage = "Open was cancelled."
@@ -86,6 +92,53 @@ struct ControlWindowView: View {
                     ?? "Enter the mesh first."
             }
             .disabled(!appModel.immersiveSpaceOpen)
+
+            GroupBox("Room Map") {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let count = appModel.roomMapSurfaceCount {
+                        Label(
+                            appModel.roomMapRestored
+                                ? "Map active (\(count) surfaces)"
+                                : "Map saved (\(count) surfaces)"
+                                    + (appModel.immersiveSpaceOpen ? " — locating room…" : ""),
+                            systemImage: appModel.roomMapRestored
+                                ? "map.fill" : "location.magnifyingglass"
+                        )
+                        .font(.footnote)
+                    } else {
+                        Text(
+                            "No room map saved. Enter the mesh in Wireframe mode, sweep the whole room, then save. Every later session restores it so fires can start anywhere in the room."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Button("Save Room Map") {
+                            Task {
+                                appModel.statusMessage =
+                                    await appModel.saveRoomMapHandler?()
+                                    ?? "Enter the mesh first."
+                            }
+                        }
+                        .disabled(!appModel.immersiveSpaceOpen)
+
+                        Button("Delete Map", role: .destructive) {
+                            Task {
+                                if let handler = appModel.deleteRoomMapHandler {
+                                    appModel.statusMessage = await handler()
+                                } else {
+                                    RoomMapStore.delete()
+                                    appModel.roomMapSurfaceCount = nil
+                                    appModel.statusMessage = "Room map deleted."
+                                }
+                            }
+                        }
+                        .disabled(!appModel.hasRoomMap)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             if appModel.mode == .fire {
                 GroupBox("Responder Status") {
@@ -136,7 +189,7 @@ struct ControlWindowView: View {
 #endif
 
 #if DEBUG
-                Text("Pinch a scanned surface once to start five fires.")
+                Text("A fire breaks out on its own shortly after the scenario starts.")
                     .font(.footnote).foregroundStyle(.secondary)
 #endif
             }
