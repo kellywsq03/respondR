@@ -31,6 +31,8 @@ jobs:
             -project respondR.xcodeproj
 
       - name: Build App
+        env:
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
           xcodebuild \
             -project respondR.xcodeproj \
