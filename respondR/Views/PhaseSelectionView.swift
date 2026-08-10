@@ -2,9 +2,12 @@ import SwiftUI
 
 struct PhaseSelectionView: View {
     @Binding var screen: AppScreen
+    @Environment(SceneViewModel.self) var viewModel
+    @State private var isPreloadingPhase1 = false
+    @State private var preloadErrorMessage: String?
 
     var body: some View {
-        BillboardedPanel(initialScale: 5.5) {
+        BillboardedPanel(initialScale: 5.5, anchorY: 0.05) {
             VStack(spacing: 10) {
                 VStack(spacing: 2) {
                     Text("RespondR")
@@ -18,9 +21,39 @@ struct PhaseSelectionView: View {
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(.secondary)
 
+                if isPreloadingPhase1 {
+                    HStack(spacing: 12) {
+                        ProgressView().controlSize(.mini)
+                        Text("Preparing Phase I assets…")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let errorMessage = preloadErrorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                }
+
                 HStack(spacing: 8) {
                     Button {
-                        screen = .layoutSelection
+                        Task {
+                            if !viewModel.phase1AssetsDownloaded {
+                                isPreloadingPhase1 = true
+                                preloadErrorMessage = nil
+                                do {
+                                    try await viewModel.preloadPhase1Assets()
+                                } catch {
+                                    print("Phase I preload error:", error)
+                                    preloadErrorMessage = "Unable to download assets for Phase I. Please try again."
+                                }
+                                isPreloadingPhase1 = false
+                            }
+                            screen = .layoutSelection
+                        }
                     } label: {
                         PhaseCard(
                             phase: "Phase I",
@@ -30,6 +63,7 @@ struct PhaseSelectionView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .disabled(isPreloadingPhase1)
 
                     Button {
                         screen = .phaseTwo
@@ -44,9 +78,11 @@ struct PhaseSelectionView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(8)
+            .padding(.horizontal, 12)
+            .padding(.top, 14)
+            .padding(.bottom, 22)
             .fixedSize()
-            .glassBackgroundEffect()
+            .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
     }
 }

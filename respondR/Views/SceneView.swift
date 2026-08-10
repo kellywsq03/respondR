@@ -76,6 +76,61 @@ func loadRoomEntity() async -> Entity {
     return group
 }
 
+@MainActor
+func loadAssetEntity(named assetName: String) async -> Entity {
+    let group = Entity()
+    group.name = "tabletopGroup"
+
+    let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    let itemsURL = documentsURL.appendingPathComponent("items")
+    let assetURL = itemsURL.appendingPathComponent(assetName)
+
+    let room: Entity?
+    do {
+        room = try await Entity(contentsOf: assetURL)
+        print("✅ Loaded asset via contentsOf URL: \(assetURL.path)")
+    } catch {
+        print("❌ Failed loading asset at \(assetURL.path): \(error)")
+        room = nil
+    }
+
+    guard let room else { return group }
+
+    room.name = "roomModel"
+
+    // Fit the model into a ~0.6 m footprint centered at group origin, floor at y=0.
+    let bounds = room.visualBounds(relativeTo: nil)
+    let size = bounds.max - bounds.min
+    let maxHorizontal = max(size.x, size.z)
+    let targetSize: Float = 0.6
+    let scale = maxHorizontal > 0 ? targetSize / maxHorizontal : 1.0
+    room.scale = SIMD3(repeating: scale)
+
+    let center = (bounds.min + bounds.max) * 0.5
+    room.position = SIMD3(
+        -center.x * scale,
+        -bounds.min.y * scale,
+        -center.z * scale
+    )
+    print("📐 Applied scale \(scale), position \(room.position) for asset")
+
+    group.addChild(room)
+    room.generateCollisionShapes(recursive: true)
+    enableInputTargeting(room)
+
+    let scaledSize = size * scale
+    let boxSize = SIMD3<Float>(
+        max(scaledSize.x, 0.1) + 0.05,
+        max(scaledSize.y, 0.1) + 0.05,
+        max(scaledSize.z, 0.1) + 0.05
+    )
+    group.components.set(CollisionComponent(shapes: [ShapeResource.generateBox(size: boxSize)]))
+    group.components.set(InputTargetComponent())
+    group.components.set(HoverEffectComponent())
+
+    return group
+}
+
 private func enableInputTargeting(_ entity: Entity) {
     entity.components.set(InputTargetComponent())
     for child in entity.children {
@@ -314,14 +369,27 @@ func colorForCategory(_ category: ItemCategory) -> UIColor {
     case .furniture: return UIColor(red: 0.3, green: 0.6, blue: 0.9, alpha: 1.0)
     case .safety:    return UIColor(red: 0.9, green: 0.3, blue: 0.3, alpha: 1.0)
     case .equipment: return UIColor(red: 0.5, green: 0.8, blue: 0.4, alpha: 1.0)
+    case .hazard:    return UIColor(red: 1.0, green: 0.42, blue: 0.0, alpha: 1.0)
     }
 }
 
-func buildPlacedItemEntity(_ item: PlacedItem) -> ModelEntity {
-    // Every item is a 15 mm cube — matches the floor grid cellSize so a placed
-    // item occupies exactly one cell with no visual overhang.
+@MainActor
+func buildPlacedItemEntity(_ item: PlacedItem) -> Entity {
+    if item.itemType.usdzResourceName != nil {
+        return buildUSDZPlacedItemEntity(item)
+    }
+
+    // Each marker fits within one 15 mm grid cell, so placement reserves exactly
+    // the cell selected by the user without visual overhang.
     let boxSize: Float = 0.015
-    let mesh = MeshResource.generateBox(size: boxSize, cornerRadius: 0.002)
+    // Fire uses a rounded marker so an ignition point is immediately distinct
+    // from the square markers used for placeable room objects.
+    let mesh: MeshResource
+    if item.itemType.category == .hazard {
+        mesh = MeshResource.generateSphere(radius: boxSize * 0.55)
+    } else {
+        mesh = MeshResource.generateBox(size: boxSize, cornerRadius: 0.002)
+    }
     let collisionShape = ShapeResource.generateBox(size: SIMD3<Float>(repeating: boxSize))
     let yLift: Float = boxSize / 2
     let matColor = colorForCategory(item.itemType.category)
@@ -341,10 +409,76 @@ func buildPlacedItemEntity(_ item: PlacedItem) -> ModelEntity {
     return entity
 }
 
+/// Creates a placeable root immediately, then replaces its small loading marker with
+/// the requested USDZ. This preserves the existing grid/gesture behavior while an
+/// asset is loading asynchronously.
+@MainActor
+private func buildUSDZPlacedItemEntity(_ item: PlacedItem) -> Entity {
+    let root = Entity()
+    root.name = "placed_\(item.id.uuidString)"
+    root.position = item.position
+    root.components.set(PlacedItemComponent(itemID: item.id))
+    root.components.set(InputTargetComponent())
+    root.components.set(HoverEffectComponent())
+
+    let loadingMesh = MeshResource.generateBox(size: 0.012, cornerRadius: 0.002)
+    let loadingMaterial = SimpleMaterial(color: colorForCategory(item.itemType.category), roughness: 0.6, isMetallic: false)
+    let loadingMarker = ModelEntity(mesh: loadingMesh, materials: [loadingMaterial])
+    loadingMarker.name = "loadingAssetMarker"
+    loadingMarker.position.y = 0.006
+    loadingMarker.generateCollisionShapes(recursive: false)
+    root.addChild(loadingMarker)
+    configurePlacedItemInteraction(root, itemID: item.id)
+
+    let resourceName = item.itemType.usdzResourceName!
+    Task { @MainActor in
+        do {
+            guard let url = Bundle.main.url(forResource: resourceName, withExtension: "usdz", subdirectory: "ItemAssets")
+                    ?? Bundle.main.url(forResource: resourceName, withExtension: "usdz") else {
+                print("⚠️ USDZ asset '\(resourceName)' is not in the app bundle")
+                return
+            }
+            let asset = try await Entity(contentsOf: url)
+
+            // An item may have been removed while its asset was loading.
+            guard root.parent != nil else { return }
+
+            let bounds = asset.visualBounds(relativeTo: nil)
+            let size = bounds.max - bounds.min
+            let largestHorizontalDimension = max(size.x, size.z)
+            let targetFootprint: Float = 0.0125
+            let scale = largestHorizontalDimension > 0 ? targetFootprint / largestHorizontalDimension : 1
+            asset.scale = SIMD3(repeating: scale)
+            let center = (bounds.min + bounds.max) * 0.5
+            asset.position = SIMD3(-center.x * scale, -bounds.min.y * scale, -center.z * scale)
+
+            loadingMarker.removeFromParent()
+            root.addChild(asset)
+            configurePlacedItemInteraction(root, itemID: item.id)
+            root.generateCollisionShapes(recursive: true)
+            print("✅ Loaded placed USDZ asset: \(resourceName)")
+        } catch {
+            print("⚠️ Could not load USDZ asset '\(resourceName)': \(error)")
+        }
+    }
+    return root
+}
+
+@MainActor
+private func configurePlacedItemInteraction(_ entity: Entity, itemID: UUID) {
+    entity.components.set(PlacedItemComponent(itemID: itemID))
+    entity.components.set(InputTargetComponent())
+    entity.components.set(HoverEffectComponent())
+    for child in entity.children {
+        configurePlacedItemInteraction(child, itemID: itemID)
+    }
+}
+
 // MARK: - Scene View
 
 struct SceneView: View {
-    let layoutID: Int
+    let layoutID: Int?
+    let assetName: String?
     @Binding var screen: AppScreen
     @Environment(SceneViewModel.self) var viewModel
 
@@ -357,11 +491,16 @@ struct SceneView: View {
     // Rotating around Y then composes on top of this, revealing the 3D structure.
     private let baseTilt = simd_quatf(angle: -.pi / 9, axis: [1, 0, 0])
 
-    var layout: LayoutConfig { LayoutConfig.all.first { $0.id == layoutID }! }
+    var layout: LayoutConfig? { layoutID.flatMap { id in LayoutConfig.all.first { $0.id == id } } }
 
     var body: some View {
         RealityView { content, attachments in
-            let tabletop = await loadRoomEntity()
+            let tabletop: Entity
+            if let name = assetName {
+                tabletop = await loadAssetEntity(named: name)
+            } else {
+                tabletop = await loadRoomEntity()
+            }
             tabletop.position = viewModel.tabletopTranslation
             tabletop.orientation = baseTilt
             content.add(tabletop)
@@ -445,7 +584,7 @@ struct SceneView: View {
                             .fixedSize()
                     }
                     Divider().frame(height: 18)
-                    Text(layout.name)
+                    Text(layout?.name ?? "Layout\(layout?.id ?? 0)")
                         .font(.body.weight(.semibold))
                         .lineLimit(1)
                 }
@@ -736,6 +875,9 @@ struct SceneView: View {
         viewModel.floorGrid?.occupy(col: targetCol, row: targetRow, itemID: placed.id)
         let placedEntity = buildPlacedItemEntity(placed)
         tabletop.addChild(placedEntity)
+        if itemType.isFire {
+            viewModel.startFireSpread()
+        }
     }
 
     /// Snap a tabletop-local position to the nearest WALKABLE grid cell center.
@@ -749,6 +891,7 @@ struct SceneView: View {
     }
 
     private func resetViewModel() {
+        viewModel.stopFireSpread()
         viewModel.tabletopAnchor = nil
         viewModel.floorGrid = nil
         viewModel.selectedItemType = nil

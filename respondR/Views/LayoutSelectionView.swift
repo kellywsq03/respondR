@@ -2,17 +2,23 @@ import SwiftUI
 
 struct LayoutSelectionView: View {
     @Binding var screen: AppScreen
+    @Environment(SceneViewModel.self) var viewModel
 
     var body: some View {
-        BillboardedPanel(initialScale: 7.5) {
+        BillboardedPanel(initialScale: 4.5) {
             VStack(spacing: 6) {
                 HStack(spacing: 6) {
                     Button {
                         screen = .phaseSelection
                     } label: {
                         Image(systemName: "chevron.left")
-                            .font(.caption.weight(.medium))
+                            .font(.system(size: 8, weight: .medium))
+                            .frame(width: 16, height: 16)
                     }
+                    .buttonStyle(.plain)
+                    .background(.regularMaterial, in: Circle())
+                    .hoverEffect()
+
                     Text("Select Layout")
                         .font(.caption.weight(.bold))
                 }
@@ -22,16 +28,77 @@ struct LayoutSelectionView: View {
                         Button {
                             screen = .liveScene(layout: layout.id)
                         } label: {
-                            LayoutCard(layout: layout)
+                            Text(layout.name)
+                                .font(.system(size: 10, weight: .semibold))
+                                .lineLimit(1)
+                                .frame(width: 56, height: 38)
+                                .background(.regularMaterial)
+                                .hoverEffect()
                         }
                         .buttonStyle(.plain)
                     }
                 }
+
+                // Scanned assets
+                if !viewModel.preloadedAssetNames.isEmpty {
+                    VStack(spacing: 12) {
+                        Text("Scanned Assets")
+                            .font(.system(size: 10, weight: .semibold))
+
+                        HStack(spacing: 16) {
+                            ForEach(
+                                viewModel.preloadedAssetNames,
+                                id: \.self
+                            ) { assetName in
+                                Button {
+                                    screen = .liveSceneAsset(assetName: assetName)
+                                } label: {
+                                    DownloadedAssetCard(assetName: assetName)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
             }
-            .padding(6)
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
             .fixedSize()
-            .glassBackgroundEffect()
+            .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
+    }
+}
+
+private struct DownloadedAssetCard: View {
+    let assetName: String
+
+    var body: some View {
+        VStack(spacing: 3) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.accentColor.opacity(0.16))
+
+                Image(systemName: "cube.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.primary)
+            }
+            .frame(width: 56, height: 38)
+
+            Text(assetName)
+                .font(.system(size: 8, weight: .semibold))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+
+        }
+        .padding(4)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
+        )
+        .hoverEffect()
     }
 }
 
