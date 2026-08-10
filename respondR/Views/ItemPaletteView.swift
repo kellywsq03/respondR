@@ -127,6 +127,7 @@ private struct PaletteCell: View {
         case .furniture: return .blue
         case .safety:    return .red
         case .equipment: return .green
+        case .hazard:    return .orange
         }
     }
 }

@@ -17,22 +17,185 @@ class SceneViewModel {
     var tabletopScale: Float = 2.5
     var tabletopRotation: simd_quatf = simd_quatf(angle: 0, axis: [0, 1, 0])
 
+    /// A small, bounded update loop makes an ignition point visibly expand without
+    /// allowing a large layout to fill with markers all at once.
+    private let fireSpreadIntervalNanoseconds: UInt64 = 700_000_000
+    private let fireSpreadFanoutPerSource = 3
+    private let maximumFireMarkersPerSource = 240
+    /// Wood uses this base delay; plastic burns at 75%, metal at 200%, and
+    /// fireproof objects do not receive a burn timer.
+    private let woodBurnDuration: TimeInterval = 4.0
+    private var fireSpreadTask: Task<Void, Never>? = nil
+    private var objectIgnitionTimes: [UUID: Date] = [:]
+
     func placeItem(_ type: ItemType, at localPosition: SIMD3<Float>) -> PlacedItem {
-        let item = PlacedItem(id: UUID(), itemType: type, position: localPosition)
+        let id = UUID()
+        let item = PlacedItem(
+            id: id,
+            itemType: type,
+            position: localPosition,
+            fireSourceID: type.isFire ? id : nil
+        )
         placedItems.append(item)
         selectedItemType = nil
         return item
     }
 
-    func removeItem(id: UUID) {
-        // Free the grid cell the item was occupying so a new item can be placed there.
-        if let item = placedItems.first(where: { $0.id == id }),
-           let cell = floorGrid?.cellAt(local: item.position) {
-            floorGrid?.free(col: cell.col, row: cell.row)
+    func startFireSpread() {
+        guard fireSpreadTask == nil else { return }
+        fireSpreadTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: self.fireSpreadIntervalNanoseconds)
+                guard !Task.isCancelled else { return }
+                self.spreadFireOneStep()
+            }
         }
-        placedItems.removeAll { $0.id == id }
-        if selectedPlacedItemID == id {
+    }
+
+    func stopFireSpread() {
+        fireSpreadTask?.cancel()
+        fireSpreadTask = nil
+        objectIgnitionTimes.removeAll()
+    }
+
+    /// Expands each user-placed ignition front by a few neighboring cells. The
+    /// source-distance ordering keeps growth moving outward from the initial point;
+    /// walls, furniture, and occupied cells remain impassable.
+    private func spreadFireOneStep() {
+        guard var grid = floorGrid, let tabletop = tabletopAnchor else {
+            stopFireSpread()
+            return
+        }
+
+        let sources = placedItems.filter { $0.itemType.isFire && $0.fireSourceID == $0.id }
+        guard !sources.isEmpty else {
+            stopFireSpread()
+            return
+        }
+
+        igniteAndBurnTouchedObjects(in: &grid, tabletop: tabletop)
+
+        for source in sources {
+            let sourceFires = placedItems.filter { $0.fireSourceID == source.id }
+            guard sourceFires.count < maximumFireMarkersPerSource,
+                  let sourceCell = grid.cellAt(local: source.position) else { continue }
+
+            var candidateKeys = Set<Int>()
+            for fire in sourceFires {
+                guard let cell = grid.cellAt(local: fire.position) else { continue }
+                for rowDelta in -1...1 {
+                    for colDelta in -1...1 where colDelta != 0 || rowDelta != 0 {
+                        let col = cell.col + colDelta
+                        let row = cell.row + rowDelta
+                        guard grid.isWalkable(col: col, row: row), grid.isFree(col: col, row: row) else { continue }
+                        candidateKeys.insert(row * grid.cols + col)
+                    }
+                }
+            }
+
+            let candidates = candidateKeys
+                .map { (col: $0 % grid.cols, row: $0 / grid.cols) }
+                .sorted {
+                    let lhsDistance = ($0.col - sourceCell.col) * ($0.col - sourceCell.col)
+                        + ($0.row - sourceCell.row) * ($0.row - sourceCell.row)
+                    let rhsDistance = ($1.col - sourceCell.col) * ($1.col - sourceCell.col)
+                        + ($1.row - sourceCell.row) * ($1.row - sourceCell.row)
+                    if lhsDistance != rhsDistance { return lhsDistance < rhsDistance }
+                    if $0.row != $1.row { return $0.row < $1.row }
+                    return $0.col < $1.col
+                }
+
+            let remainingCapacity = maximumFireMarkersPerSource - sourceFires.count
+            for candidate in candidates.prefix(min(fireSpreadFanoutPerSource, remainingCapacity)) {
+                let fire = PlacedItem(
+                    id: UUID(),
+                    itemType: .fire,
+                    position: grid.cellCenterLocal(col: candidate.col, row: candidate.row),
+                    fireSourceID: source.id
+                )
+                placedItems.append(fire)
+                grid.occupy(col: candidate.col, row: candidate.row, itemID: fire.id)
+                tabletop.addChild(buildPlacedItemEntity(fire))
+            }
+        }
+        floorGrid = grid
+    }
+
+    /// Starts a burn timer as soon as a fire marker reaches a neighboring object
+    /// cell. The floor grid reserves objects as occupied cells, so fire cannot pass
+    /// through them until the timer removes the object and frees that cell.
+    private func igniteAndBurnTouchedObjects(in grid: inout FloorGrid, tabletop: Entity) {
+        let activeFires = placedItems.filter { $0.itemType.isFire && $0.fireSourceID != nil }
+        let burnableItems: [UUID: TimeInterval] = Dictionary(
+            uniqueKeysWithValues: placedItems.compactMap { item -> (UUID, TimeInterval)? in
+                guard let material = item.itemType.combustionMaterial,
+                      let burnDuration = material.burnDuration(base: woodBurnDuration) else { return nil }
+                return (item.id, burnDuration)
+            }
+        )
+        let now = Date()
+
+        for fire in activeFires {
+            guard let cell = grid.cellAt(local: fire.position) else { continue }
+            for rowDelta in -1...1 {
+                for colDelta in -1...1 where colDelta != 0 || rowDelta != 0 {
+                    let occupantID = grid.occupant(col: cell.col + colDelta, row: cell.row + rowDelta)
+                    if let occupantID, burnableItems[occupantID] != nil, objectIgnitionTimes[occupantID] == nil {
+                        objectIgnitionTimes[occupantID] = now
+                    }
+                }
+            }
+        }
+
+        let burnedObjectIDs: [UUID] = objectIgnitionTimes.compactMap { id, ignitionTime -> UUID? in
+            guard let burnDuration = burnableItems[id] else { return nil }
+            return now.timeIntervalSince(ignitionTime) >= burnDuration ? id : nil
+        }
+        guard !burnedObjectIDs.isEmpty else { return }
+
+        let burnedSet = Set(burnedObjectIDs)
+        for item in placedItems where burnedSet.contains(item.id) {
+            if let cell = grid.cellAt(local: item.position) {
+                grid.free(col: cell.col, row: cell.row)
+            }
+            tabletop.findEntity(named: "placed_\(item.id.uuidString)")?.removeFromParent()
+        }
+        placedItems.removeAll { burnedSet.contains($0.id) }
+        if let selectedID = selectedPlacedItemID, burnedSet.contains(selectedID) {
             selectedPlacedItemID = nil
+        }
+        for id in burnedSet {
+            objectIgnitionTimes.removeValue(forKey: id)
+        }
+    }
+
+    func removeItem(id: UUID) {
+        guard let item = placedItems.first(where: { $0.id == id }) else { return }
+        // Removing an ignition point also removes the fire it originated. This keeps
+        // the layout and its grid occupancy in sync when a scenario is edited.
+        let idsToRemove: Set<UUID>
+        if item.itemType.isFire && item.fireSourceID == item.id {
+            idsToRemove = Set(placedItems.compactMap { $0.fireSourceID == id ? $0.id : nil })
+        } else {
+            idsToRemove = [id]
+        }
+
+        for removedItem in placedItems where idsToRemove.contains(removedItem.id) {
+            if let cell = floorGrid?.cellAt(local: removedItem.position) {
+                floorGrid?.free(col: cell.col, row: cell.row)
+            }
+            tabletopAnchor?.findEntity(named: "placed_\(removedItem.id.uuidString)")?.removeFromParent()
+        }
+        placedItems.removeAll { idsToRemove.contains($0.id) }
+        for removedID in idsToRemove {
+            objectIgnitionTimes.removeValue(forKey: removedID)
+        }
+        if let selectedID = selectedPlacedItemID, idsToRemove.contains(selectedID) {
+            selectedPlacedItemID = nil
+        }
+        if !placedItems.contains(where: { $0.itemType.isFire && $0.fireSourceID == $0.id }) {
+            stopFireSpread()
         }
     }
 }
