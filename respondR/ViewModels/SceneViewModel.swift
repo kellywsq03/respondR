@@ -12,6 +12,9 @@ class SceneViewModel {
     weak var tabletopAnchor: Entity? = nil
     var floorGrid: FloorGrid? = nil
 
+    var phase1AssetsDownloaded = false
+    var preloadedAssetNames: [String] = []
+
     // Left of center (leaves room for trailing panel), below center (tabletop feel), forward toward viewer
     var tabletopTranslation: SIMD3<Float> = [-0.1, -0.1, 0.05]
     var tabletopScale: Float = 2.5
@@ -27,6 +30,11 @@ class SceneViewModel {
     private let woodBurnDuration: TimeInterval = 4.0
     private var fireSpreadTask: Task<Void, Never>? = nil
     private var objectIgnitionTimes: [UUID: Date] = [:]
+
+    func preloadPhase1Assets() async throws {
+        preloadedAssetNames = try await SupabaseAssetLoader.downloadAllUSDZAssets()
+        phase1AssetsDownloaded = true
+    }
 
     func placeItem(_ type: ItemType, at localPosition: SIMD3<Float>) -> PlacedItem {
         let id = UUID()

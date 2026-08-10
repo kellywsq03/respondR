@@ -5,4 +5,5 @@ enum AppScreen: Equatable {
     case layoutSelection
     case liveScene(layout: Int)
     case phaseTwo
+    case liveSceneAsset(assetName: String)
 }
