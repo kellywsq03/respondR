@@ -5,7 +5,7 @@ struct LayoutSelectionView: View {
     @Environment(SceneViewModel.self) var viewModel
 
     var body: some View {
-        BillboardedPanel(initialScale: 7.5) {
+        BillboardedPanel(initialScale: 4.5) {
             VStack(spacing: 6) {
                 HStack(spacing: 6) {
                     Button {
