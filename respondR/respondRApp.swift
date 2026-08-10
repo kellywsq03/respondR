@@ -29,5 +29,6 @@ struct respondRApp: App {
                 .environment(appModel)
         }
         .immersionStyle(selection: .constant(.mixed), in: .mixed)
+        .defaultSize(width: 0.9, height: 0.6, depth: 0.55, in: .meters)
     }
 }
