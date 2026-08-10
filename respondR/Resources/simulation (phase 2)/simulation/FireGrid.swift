@@ -13,6 +13,9 @@ struct FireGrid {
 
     var count: Int { occupied.count }
 
+    /// World-space centers of every occupied cell (for persisting a room map).
+    var centers: [SIMD3<Float>] { occupied.map { center(of: $0) } }
+
     func coord(for p: SIMD3<Float>) -> SIMD3<Int32> {
         SIMD3<Int32>(
             Int32(floor(p.x / cellSize)),
@@ -26,6 +29,22 @@ struct FireGrid {
 
     mutating func insert(_ positions: [SIMD3<Float>]) {
         for p in positions { occupied.insert(coord(for: p)) }
+    }
+
+    /// Occupied cells within a head-relative horizontal ring and vertical band.
+    func occupiedCells(
+        around origin: SIMD3<Float>,
+        horizontalDistance: ClosedRange<Float>,
+        verticalOffset: ClosedRange<Float>
+    ) -> [SIMD3<Int32>] {
+        occupied.filter { coordinate in
+            let position = center(of: coordinate)
+            let horizontal = simd_length(
+                SIMD2<Float>(position.x - origin.x, position.z - origin.z)
+            )
+            return horizontalDistance.contains(horizontal)
+                && verticalOffset.contains(position.y - origin.y)
+        }
     }
 
     /// The occupied cells in the 26-cell neighborhood around `c`.

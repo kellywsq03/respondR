@@ -17,14 +17,14 @@ struct respondRApp: App {
     }
 
     var body: some SwiftUI.Scene {
-        WindowGroup {
+        WindowGroup(id: AppSceneID.mainWindow) {
             ContentView()
                 .environment(appModel)
         }
         .windowStyle(.volumetric)
         .defaultSize(width: 2.2, height: 1.0, depth: 1.5, in: .meters)
 
-        ImmersiveSpace(id: "MeshSpace") {
+        ImmersiveSpace(id: AppSceneID.meshSpace) {
             ImmersiveMeshView()
                 .environment(appModel)
         }
