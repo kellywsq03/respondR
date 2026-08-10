@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		47171FB6302969080010A9C6 /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 47171FB5302969080010A9C6 /* Secrets.xcconfig */; };
 		A29CA2423027025500128F56 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = A29CA2413027025500128F56 /* Auth */; };
 		A29CA2443027025500128F56 /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = A29CA2433027025500128F56 /* Functions */; };
 		A29CA2463027025500128F56 /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = A29CA2453027025500128F56 /* PostgREST */; };
@@ -16,6 +17,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		47171FB5302969080010A9C6 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		A250366930259C5F0054FE7F /* respondR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = respondR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -61,6 +63,7 @@
 		A250366030259C5F0054FE7F = {
 			isa = PBXGroup;
 			children = (
+				47171FB5302969080010A9C6 /* Secrets.xcconfig */,
 				A250366B30259C5F0054FE7F /* respondR */,
 				A250366A30259C5F0054FE7F /* Products */,
 			);
@@ -144,6 +147,7 @@
 		A250366730259C5F0054FE7F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				47171FB6302969080010A9C6 /* Secrets.xcconfig in Resources */,
 			);
 		};
 /* End PBXResourcesBuildPhase section */

@@ -45,17 +45,19 @@ struct ItemType: Equatable {
         .fire,
 
         // Furniture
-        ItemType(name: "Office Chair",     sfSymbol: "chair.lounge.fill",         category: .furniture),
-        ItemType(name: "Desk",             sfSymbol: "tablecells",                category: .furniture),
-        ItemType(name: "Conference Table", sfSymbol: "rectangle.split.3x1.fill",  category: .furniture),
-        ItemType(name: "Bookshelf",        sfSymbol: "books.vertical.fill",       category: .furniture),
-        ItemType(name: "Whiteboard",       sfSymbol: "rectangle.dashed",          category: .furniture),
+        ItemType(name: "Office Chair",     sfSymbol: "chair.lounge.fill",         category: .furniture, combustionMaterial: .wood, usdzResourceName: nil),
+        ItemType(name: "Desk",             sfSymbol: "tablecells",                category: .furniture, combustionMaterial: .wood, usdzResourceName: nil),
+        ItemType(name: "Conference Table", sfSymbol: "rectangle.split.3x1.fill",  category: .furniture, combustionMaterial: .wood, usdzResourceName: nil),
+        ItemType(name: "Bookshelf",        sfSymbol: "books.vertical.fill",       category: .furniture, combustionMaterial: .wood, usdzResourceName: nil),
+        ItemType(name: "Wardrobe",         sfSymbol: "cabinet.fill",              category: .furniture, combustionMaterial: .wood, usdzResourceName: "wardrobe"),
+        ItemType(name: "Whiteboard",       sfSymbol: "rectangle.dashed",          category: .furniture, combustionMaterial: .fireproof, usdzResourceName: nil),
 
+        
         // Safety
-        ItemType(name: "Fire Extinguisher", sfSymbol: "flame.circle.fill",        category: .safety),
-        ItemType(name: "Smoke Detector",    sfSymbol: "sensor.fill",              category: .safety),
-        ItemType(name: "First Aid Kit",     sfSymbol: "cross.case.fill",          category: .safety),
-
+        ItemType(name: "Fire Extinguisher", sfSymbol: "flame.circle.fill",        category: .safety, combustionMaterial: .metal, usdzResourceName: nil),
+        ItemType(name: "Smoke Detector",    sfSymbol: "sensor.fill",              category: .safety, combustionMaterial: .fireproof, usdzResourceName: nil),
+        ItemType(name: "First Aid Kit",     sfSymbol: "cross.case.fill",          category: .safety, combustionMaterial: .plastic, usdzResourceName: nil),
+                
         // Equipment
         ItemType(name: "Monitor",  sfSymbol: "display",                     category: .equipment, combustionMaterial: .plastic, usdzResourceName: nil),
         ItemType(name: "Laptop",   sfSymbol: "laptopcomputer",              category: .equipment, combustionMaterial: .plastic, usdzResourceName: nil),
