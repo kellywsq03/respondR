@@ -27,6 +27,26 @@ final class AppModel {
 
     var hasRoomMap: Bool { roomMapSurfaceCount != nil }
 
+    /// Head-locked action prompt. World-space gaze targets out in the room
+    /// compete with scanned geometry and the objects themselves; this prompt
+    /// rides in front of the learner like the status HUD, so picking things up
+    /// never depends on hitting a small target across the room.
+    enum ActionPrompt: Equatable {
+        case pickUpExtinguisher(inRange: Bool, metres: Float)
+        case rescueVictim(inRange: Bool, metres: Float)
+
+        var isInRange: Bool {
+            switch self {
+            case .pickUpExtinguisher(let inRange, _), .rescueVictim(let inRange, _): inRange
+            }
+        }
+    }
+
+    var actionPrompt: ActionPrompt? = nil
+    /// How close the learner must be before the victim can be rescued, so the
+    /// scenario still requires walking to them.
+    static let victimRescueDistance: Float = 2.5
+
     enum Mode: String, CaseIterable, Identifiable {
         case wireframe = "Wireframe"
         case fire = "Fire"

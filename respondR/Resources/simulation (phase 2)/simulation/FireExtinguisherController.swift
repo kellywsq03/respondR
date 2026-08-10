@@ -10,8 +10,14 @@ final class FireExtinguisherController {
     typealias DeviceTransformProvider = @MainActor () -> simd_float4x4?
 
     static let targetHeight: Float = 0.55
-    static let sprayLength: Float = 2
-    static let sprayHalfAngle: Float = 17.5 * .pi / 180
+    /// Length of the visual cone and the distance ahead of the learner the
+    /// spray converges on.
+    static let sprayLength: Float = 2.5
+    /// How far the extinguishing volume actually reaches from the nozzle.
+    static let sprayReach: Float = 3.5
+    static let sprayHalfAngle: Float = 25 * .pi / 180
+    /// The learner must be beside the extinguisher to pick it up.
+    static let pickUpDistance: Float = 1.0
 
     var onStateChange: ((FireExtinguisherSession.Phase, Bool) -> Void)?
     var onError: ((String) -> Void)?
@@ -142,6 +148,13 @@ final class FireExtinguisherController {
     func pickUp() -> Bool {
         let didPickUp = session.pickUp()
         if didPickUp {
+            // The held bottle rides directly in front of the face. Leaving its
+            // collision/input targeting active would intercept the gaze for
+            // everything the learner looks at from then on — most importantly
+            // the victim's rescue button.
+            if let extinguisherEntity {
+                Self.disableInteraction(on: extinguisherEntity)
+            }
             notifyStateChange()
         }
         return didPickUp
@@ -181,18 +194,40 @@ final class FireExtinguisherController {
             currentSprayCone = nil
             return
         }
+
+        // Converge the spray on what the learner is LOOKING at, rather than
+        // firing parallel to their gaze. The nozzle sits ~0.5 m to the lower
+        // right of the head, so a parallel cone only covered fires in a narrow
+        // 1.7-2.6 m band — anything you walked up to fell outside it.
         let apex = nozzleEntity.convert(position: .zero, to: nil)
-        let forwardPoint = nozzleEntity.convert(
-            position: SIMD3<Float>(0, 0, -1),
-            to: nil
+        let headPosition = SIMD3<Float>(
+            deviceTransform.columns.3.x,
+            deviceTransform.columns.3.y,
+            deviceTransform.columns.3.z
         )
-        let direction = forwardPoint - apex
+        let gazeForward = -simd_normalize(
+            SIMD3<Float>(
+                deviceTransform.columns.2.x,
+                deviceTransform.columns.2.y,
+                deviceTransform.columns.2.z
+            )
+        )
+        let aimPoint = headPosition + gazeForward * Self.sprayLength
+        let direction = aimPoint - apex
         currentSprayCone = SprayCone(
             apex: apex,
             direction: direction,
-            maxDistance: Self.sprayLength,
+            maxDistance: Self.sprayReach,
             halfAngleRadians: Self.sprayHalfAngle
         )
+
+        // Point the visible cone the same way so the spray reads correctly.
+        if let sprayEntity, simd_length_squared(direction) > 0 {
+            sprayEntity.setOrientation(
+                simd_quatf(from: SIMD3<Float>(0, 0, -1), to: simd_normalize(direction)),
+                relativeTo: nil
+            )
+        }
     }
 
     func cancel() {
@@ -233,7 +268,8 @@ final class FireExtinguisherController {
             )
         )
         interactionProxy.components.set(InputTargetComponent())
-        interactionProxy.components.set(HoverEffectComponent())
+        // No HoverEffectComponent: hover on invisible geometry contends with
+        // the floating label button's own system hover for the gaze.
         container.addChild(interactionProxy)
 
         let nozzle = Entity()
@@ -299,6 +335,15 @@ final class FireExtinguisherController {
         entity.components.set(HoverEffectComponent())
         for child in entity.children {
             enableInteraction(on: child)
+        }
+    }
+
+    private static func disableInteraction(on entity: Entity) {
+        entity.components.remove(CollisionComponent.self)
+        entity.components.remove(InputTargetComponent.self)
+        entity.components.remove(HoverEffectComponent.self)
+        for child in entity.children {
+            disableInteraction(on: child)
         }
     }
 
