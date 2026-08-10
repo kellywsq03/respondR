@@ -169,26 +169,11 @@ final class CasualtyController {
         model.position -= SIMD3<Float>(bounds.center.x, bounds.min.y, bounds.center.z)
         model.generateCollisionShapes(recursive: true)
         Self.enableInteraction(on: model)
-
-        // Generous expanded pickup target (like the extinguisher's): the model's
-        // own collision hugs a small lying figure, which makes gaze targeting
-        // fussy against the surrounding room mesh.
-        let centeredBounds = container.visualBounds(relativeTo: container)
-        let proxy = Entity()
-        proxy.name = "Casualty expanded rescue target"
-        proxy.position = centeredBounds.center
-        proxy.components.set(
-            CollisionComponent(
-                shapes: [
-                    ShapeResource.generateBox(
-                        size: simd_max(centeredBounds.extents, SIMD3<Float>(repeating: 0.25)) * 2
-                    )
-                ]
-            )
-        )
-        proxy.components.set(InputTargetComponent())
-        proxy.components.set(HoverEffectComponent())
-        container.addChild(proxy)
+        // Deliberately NO expanded invisible pickup proxy: sized from a
+        // human-scale model it becomes a metres-long input-target box that
+        // swallows the gaze ray for everything near it — including the floating
+        // rescue button. The button is the primary rescue target; the model's
+        // own collision handles direct taps.
 
         container.position = floorPosition
         container.orientation = simd_quatf(

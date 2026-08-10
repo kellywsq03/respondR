@@ -18,10 +18,10 @@ struct ImmersiveMeshView: View {
     @State private var statusEntity: Entity?
     @State private var timerEntity: Entity?
     @State private var resultEntity: Entity?
-    @State private var victimLabelEntity: Entity?
-    @State private var extinguisherLabelEntity: Entity?
     @State private var exitBeaconEntity: Entity?
     @State private var exitLabelEntity: Entity?
+    @State private var actionPromptEntity: Entity?
+    @State private var gazeCatcherEntity: Entity?
     @State private var headFollowSmoother = HeadFollowSmoother()
 
     var body: some View {
@@ -63,17 +63,10 @@ struct ImmersiveMeshView: View {
                     content.add(result)
                     resultEntity = result
                 }
-                if let victimLabel = attachments.entity(for: "victim-label") {
-                    victimLabel.components.set(BillboardComponent())
-                    victimLabel.isEnabled = false
-                    content.add(victimLabel)
-                    victimLabelEntity = victimLabel
-                }
-                if let extinguisherLabel = attachments.entity(for: "extinguisher-label") {
-                    extinguisherLabel.components.set(BillboardComponent())
-                    extinguisherLabel.isEnabled = false
-                    content.add(extinguisherLabel)
-                    extinguisherLabelEntity = extinguisherLabel
+                if let prompt = attachments.entity(for: "action-prompt") {
+                    prompt.isEnabled = false
+                    content.add(prompt)
+                    actionPromptEntity = prompt
                 }
                 if let exitLabel = attachments.entity(for: "exit-label") {
                     exitLabel.components.set(BillboardComponent())
@@ -85,6 +78,23 @@ struct ImmersiveMeshView: View {
                 beacon.isEnabled = false
                 root.addChild(beacon)
                 exitBeaconEntity = beacon
+
+                // An indirect (gaze + pinch) event is only delivered to the app
+                // when the gaze has an input target. Without this, pinching
+                // while looking at open room delivers nothing and the spray
+                // never starts. This invisible plane rides far in front of the
+                // learner so the gaze ALWAYS lands on something; everything
+                // real is nearer, so it never steals a deliberate target.
+                let catcher = Entity()
+                catcher.name = "gaze-catcher"
+                catcher.components.set(
+                    CollisionComponent(
+                        shapes: [ShapeResource.generateBox(width: 80, height: 80, depth: 0.1)]
+                    )
+                )
+                catcher.components.set(InputTargetComponent())
+                content.add(catcher)
+                gazeCatcherEntity = catcher
 
                 appModel.startScenarioForAvailableContent()
 
@@ -206,19 +216,21 @@ struct ImmersiveMeshView: View {
                                         extinguisher.scheduleSpawn {
                                             scanner.queryHeadTransform()
                                         }
-                                        // Victim spawns far too; if no far floor
-                                        // has been scanned after ~7 s of polling,
-                                        // relax the minimum so Gabe still appears.
+                                        // Victim spawns 4.5-7 m away — far enough
+                                        // to walk to, near enough to stay		 inside
+                                        // the current room. If no such floor has
+                                        // been scanned after ~7 s, relax the
+                                        // minimum so Gabe still appears.
                                         var casualtyAttempts = 0
                                         casualty.scheduleSpawn(
                                             deviceTransform: { scanner.queryHeadTransform() },
                                             floorPosition: { head in
                                                 casualtyAttempts += 1
                                                 let minimumDistance: Float =
-                                                    casualtyAttempts > 30 ? 2.0 : 4.0
+                                                    casualtyAttempts > 30 ? 1.5 : 4.5
                                                 return scanner.randomFloorPosition(
                                                     around: head,
-                                                    horizontalDistance: minimumDistance...12.0,
+                                                    horizontalDistance: minimumDistance...7,
                                                     verticalOffset: -2.3 ... -0.5
                                                 )
                                             }
@@ -243,6 +255,49 @@ struct ImmersiveMeshView: View {
                                     appModel.recordExitReached()
                                 }
                             }
+                        }
+
+                        // Drive the head-locked action prompt. Written only on
+                        // change so the SwiftUI attachment isn't rebuilt every
+                        // tick.
+                        let nextPrompt: AppModel.ActionPrompt?
+                        if !appModel.isScenarioActive {
+                            nextPrompt = nil
+                        } else if let bottle = extinguisher.availableWorldPosition,
+                                  let headTransform {
+                            let head = SIMD3<Float>(
+                                headTransform.columns.3.x,
+                                headTransform.columns.3.y,
+                                headTransform.columns.3.z
+                            )
+                            let metres = simd_distance(
+                                SIMD2<Float>(head.x, head.z),
+                                SIMD2<Float>(bottle.x, bottle.z)
+                            )
+                            nextPrompt = .pickUpExtinguisher(
+                                inRange: metres <= FireExtinguisherController.pickUpDistance,
+                                metres: (metres * 10).rounded() / 10
+                            )
+                        } else if let victim = casualty.availableWorldPosition,
+                                  let headTransform {
+                            let head = SIMD3<Float>(
+                                headTransform.columns.3.x,
+                                headTransform.columns.3.y,
+                                headTransform.columns.3.z
+                            )
+                            let metres = simd_distance(
+                                SIMD2<Float>(head.x, head.z),
+                                SIMD2<Float>(victim.x, victim.z)
+                            )
+                            nextPrompt = .rescueVictim(
+                                inRange: metres <= AppModel.victimRescueDistance,
+                                metres: (metres * 10).rounded() / 10
+                            )
+                        } else {
+                            nextPrompt = nil
+                        }
+                        if appModel.actionPrompt != nextPrompt {
+                            appModel.actionPrompt = nextPrompt
                         }
 
                         updateScenarioTick(
@@ -273,40 +328,17 @@ struct ImmersiveMeshView: View {
                             resultEntity: resultEntity
                         )
 
-                        // Floating pointer labels over the spawned victim and
-                        // extinguisher (billboarded; hidden once picked up).
-                        // Attachments render at a fixed point scale, so at room
-                        // distance they'd be centimetres tall — scale them with
-                        // distance to stay readable and easy to pinch.
-                        let labelScale: (SIMD3<Float>) -> SIMD3<Float> = { position in
-                            guard let head = scanner.queryHeadTransform() else {
-                                return SIMD3<Float>(repeating: 2)
-                            }
-                            let headPosition = SIMD3<Float>(
-                                head.columns.3.x, head.columns.3.y, head.columns.3.z)
-                            let distance = simd_distance(position, headPosition)
-                            return SIMD3<Float>(repeating: max(1.0, min(6.0, distance * 0.5)))
-                        }
-                        if let position = casualty.availableWorldPosition {
-                            victimLabelEntity?.position = position + SIMD3<Float>(0, 0.95, 0)
-                            victimLabelEntity?.scale = labelScale(position)
-                            victimLabelEntity?.isEnabled = true
-                        } else {
-                            victimLabelEntity?.isEnabled = false
-                        }
-                        if let position = extinguisher.availableWorldPosition {
-                            extinguisherLabelEntity?.position = position + SIMD3<Float>(0, 0.5, 0)
-                            extinguisherLabelEntity?.scale = labelScale(position)
-                            extinguisherLabelEntity?.isEnabled = true
-                        } else {
-                            extinguisherLabelEntity?.isEnabled = false
-                        }
+                        // Passive "RETURN HERE" sign over the start beacon.
+                        // Writes are guarded: rewriting an entity's transform
+                        // every frame is what made gaze targeting glitch.
+                        let labelHead = scanner.queryHeadTransform()
                         if let beacon = exitBeaconEntity, beacon.isEnabled {
-                            let position = beacon.position + SIMD3<Float>(0, 2.55, 0)
-                            exitLabelEntity?.position = position
-                            exitLabelEntity?.scale = labelScale(position)
-                            exitLabelEntity?.isEnabled = true
-                        } else {
+                            // Passive text — no hit-testing, safe to scale.
+                            positionLabel(
+                                exitLabelEntity,
+                                at: beacon.position + SIMD3<Float>(0, 2.55, 0),
+                                headTransform: labelHead)
+                        } else if exitLabelEntity?.isEnabled == true {
                             exitLabelEntity?.isEnabled = false
                         }
                         if let headTransform = scanner.queryHeadTransform() {
@@ -347,46 +379,51 @@ struct ImmersiveMeshView: View {
                     ScenarioResultView()
                         .environment(appModel)
                 }
-                Attachment(id: "victim-label") {
-                    // A real SwiftUI Button: pickup rides on the same native
-                    // gaze+pinch mechanism as the control-window buttons, which
-                    // is far more reliable than RealityKit collision targeting.
-                    Button {
-                        rescueVictim()
-                    } label: {
-                        VStack(spacing: 4) {
-                            Text("VICTIM")
-                                .font(.title.bold())
-                            Text("Pinch to rescue")
-                                .font(.headline)
-                            Image(systemName: "arrowtriangle.down.fill")
-                                .font(.title2)
+                Attachment(id: "action-prompt") {
+                    // Head-locked, always directly in front of the learner with
+                    // nothing between it and their eyes: the same mechanism as
+                    // the status HUD and the control window, both of which
+                    // target reliably. This is the guaranteed pickup path.
+                    Group {
+                        switch appModel.actionPrompt {
+                        case .pickUpExtinguisher(let inRange, let metres):
+                            Button {
+                                pickUpExtinguisher()
+                            } label: {
+                                Label(
+                                    inRange
+                                        ? "Pick Up Extinguisher"
+                                        : "Walk to the Extinguisher (\(String(format: "%.1f", metres)) m)",
+                                    systemImage: inRange ? "flame.circle.fill" : "figure.walk"
+                                )
+                                .font(.system(size: 34, weight: .bold))
+                                .padding(.horizontal, 26)
+                                .padding(.vertical, 16)
+                            }
+                            .tint(.teal)
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!inRange)
+                        case .rescueVictim(let inRange, let metres):
+                            Button {
+                                rescueVictim()
+                            } label: {
+                                Label(
+                                    inRange
+                                        ? "Rescue Victim"
+                                        : "Move Closer to Victim (\(String(format: "%.1f", metres)) m)",
+                                    systemImage: inRange ? "figure.arms.open" : "figure.walk"
+                                )
+                                .font(.system(size: 34, weight: .bold))
+                                .padding(.horizontal, 26)
+                                .padding(.vertical, 16)
+                            }
+                            .tint(.red)
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!inRange)
+                        case nil:
+                            EmptyView()
                         }
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 12)
                     }
-                    .tint(.red)
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.roundedRectangle(radius: 16))
-                }
-                Attachment(id: "extinguisher-label") {
-                    Button {
-                        pickUpExtinguisher()
-                    } label: {
-                        VStack(spacing: 4) {
-                            Text("EXTINGUISHER")
-                                .font(.title.bold())
-                            Text("Pinch to pick up")
-                                .font(.headline)
-                            Image(systemName: "arrowtriangle.down.fill")
-                                .font(.title2)
-                        }
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 12)
-                    }
-                    .tint(.teal)
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.roundedRectangle(radius: 16))
                 }
                 Attachment(id: "exit-label") {
                     VStack(spacing: 2) {
@@ -470,10 +507,11 @@ struct ImmersiveMeshView: View {
             statusEntity = nil
             timerEntity = nil
             resultEntity = nil
-            victimLabelEntity = nil
-            extinguisherLabelEntity = nil
             exitBeaconEntity = nil
             exitLabelEntity = nil
+            actionPromptEntity = nil
+            gazeCatcherEntity = nil
+            appModel.actionPrompt = nil
             headFollowSmoother.reset()
             appModel.stopScenario()
             appModel.exportHandler = nil
@@ -571,6 +609,10 @@ struct ImmersiveMeshView: View {
         statusEntity?.isEnabled = !showsResult
         timerEntity?.isEnabled = !showsResult
         resultEntity?.isEnabled = showsResult
+        let showsPrompt = !showsResult && appModel.actionPrompt != nil
+        if actionPromptEntity?.isEnabled != showsPrompt {
+            actionPromptEntity?.isEnabled = showsPrompt
+        }
     }
 
     private func updatePresentationTransforms(
@@ -588,6 +630,61 @@ struct ImmersiveMeshView: View {
         resultEntity?.transform = Transform(
             matrix: headTransform * translation(x: 0, y: 0, z: -0.95)
         )
+        // Lower centre, clear of the status/timer row and of the held
+        // extinguisher (which sits to the lower right).
+        actionPromptEntity?.transform = Transform(
+            matrix: headTransform * translation(x: -0.10, y: -0.20, z: -1.00)
+        )
+        // Far enough away that every real target wins the gaze first.
+        gazeCatcherEntity?.transform = Transform(
+            matrix: headTransform * translation(x: 0, y: 0, z: -9)
+        )
+    }
+
+    /// Moves/scales a floating label only when the change is meaningful.
+    /// Static items therefore get ZERO per-frame writes — continuous transform
+    /// updates under the gaze are what made targeting the labels glitchy.
+    private func positionLabel(
+        _ label: Entity?,
+        at target: SIMD3<Float>,
+        headTransform: simd_float4x4?,
+        dynamicScale: Bool = true
+    ) {
+        guard let label else { return }
+        if simd_distance(label.position, target) > 0.03 {
+            label.position = target
+        }
+        // Interactive attachments must NOT be entity-scaled: the system's
+        // hover/pinch hit region does not follow entity scale, leaving a big
+        // visual with a tiny hit box. Buttons pass dynamicScale: false and get
+        // their size in SwiftUI points instead. Passive labels scale with
+        // distance (20% hysteresis so walking doesn't retrigger writes).
+        var desired: Float = 1
+        if dynamicScale, let headTransform {
+            let head = SIMD3<Float>(
+                headTransform.columns.3.x,
+                headTransform.columns.3.y,
+                headTransform.columns.3.z
+            )
+            desired = max(1.0, min(6.0, simd_distance(target, head) * 0.5))
+        }
+        if abs(label.scale.x - desired) > desired * 0.2 {
+            label.scale = SIMD3<Float>(repeating: desired)
+        }
+        if !label.isEnabled {
+            label.isEnabled = true
+        }
+    }
+
+    /// Whether `entity` is `ancestor` or one of its descendants.
+    private static func isPart(_ entity: Entity, of ancestor: Entity?) -> Bool {
+        guard let ancestor else { return false }
+        var current: Entity? = entity
+        while let candidate = current {
+            if candidate === ancestor { return true }
+            current = candidate.parent
+        }
+        return false
     }
 
     /// Rescues the victim: shared by the label button and model taps.
@@ -604,8 +701,13 @@ struct ImmersiveMeshView: View {
     private func pickUpExtinguisher() {
         guard appModel.isScenarioActive,
               let fireExtinguisher,
-              fireExtinguisher.phase == .available else { return }
-        _ = fireExtinguisher.pickUp()
+              fireExtinguisher.phase == .available,
+              // Must be standing beside it, whichever path triggered the pickup.
+              appModel.actionPrompt?.isInRange == true else { return }
+        if fireExtinguisher.pickUp() {
+            appModel.statusMessage =
+                "Extinguisher equipped — pinch and hold anywhere to spray."
+        }
     }
 
     /// One look-and-pinch on the models themselves (secondary path — the big
@@ -629,35 +731,45 @@ struct ImmersiveMeshView: View {
     private func handleSpatialEvents(_ events: SpatialEventCollection) {
         guard appModel.isScenarioActive, let fireExtinguisher else { return }
 
-        var hasFinishedEvent = false
+        // Decide from the whole collection rather than per event: a delivery
+        // can carry an active pinch from one hand and an ended one from the
+        // other, and the old per-event handling then began and immediately
+        // ended the spray in the same call.
+        var heldPinches = 0
+        var rescuePinch = false
 
         for event in events {
+            guard event.kind == .directPinch || event.kind == .indirectPinch else { continue }
             switch event.phase {
             case .active:
-                switch event.kind {
-                case .directPinch, .indirectPinch:
-                    // A pinch aimed at the victim is a rescue, never a spray —
-                    // even while the extinguisher is equipped.
-                    if let target = event.targetedEntity,
-                       let casualtyController,
-                       casualtyController.contains(target) {
-                        rescueVictim()
-                        continue
-                    }
-                    if fireExtinguisher.phase == .equipped {
-                        _ = fireExtinguisher.beginSpray()
-                    }
-                default:
-                    break
+                // A pinch aimed at the victim is a rescue, never a spray —
+                // even while the extinguisher is equipped.
+                if let target = event.targetedEntity,
+                   let casualtyController,
+                   casualtyController.contains(target) {
+                    rescuePinch = true
+                    continue
                 }
-            case .ended, .cancelled:
-                hasFinishedEvent = true
-            @unknown default:
-                hasFinishedEvent = true
+                // A pinch on the passive exit sign isn't a spray trigger.
+                if let target = event.targetedEntity,
+                   Self.isPart(target, of: exitLabelEntity) {
+                    continue
+                }
+                heldPinches += 1
+            default:
+                break
             }
         }
 
-        if hasFinishedEvent {
+        if rescuePinch {
+            rescueVictim()
+        }
+
+        if heldPinches > 0 {
+            if fireExtinguisher.phase == .equipped {
+                _ = fireExtinguisher.beginSpray()
+            }
+        } else {
             fireExtinguisher.endSpray()
         }
     }
